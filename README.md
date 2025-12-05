@@ -11,17 +11,22 @@ Un bot de trading algorithmique avancé pour scanner, analyser et tracker les op
 - **Scoring Intelligent** : Algorithme propriétaire (0-100) basé sur le volume, la liquidité et la volatilité.
 - **Filtres Avancés** : Filtrage par score, volume minimum, liquidité et niveau d'opportunité.
 
-### 2. 🐋 Whale Tracking (Nouveau)
+### 2. ⚖️ Mode Équilibrage (Nouveau)
+- **Scanning Global** : Analyse l'intégralité du marché (plus de 3000 marchés actifs) sans limite.
+- **Détection "Coin Flip"** : Isole spécifiquement les opportunités où les probabilités sont entre 45% et 55%.
+- **Vue Simplifiée** : Interface dédiée sans scoring complexe, focalisée uniquement sur le prix et le volume.
+
+### 3. 🐋 Whale Tracking (Nouveau)
 - **Détection des Gros Trades** : Identifie les transactions supérieures à $10,000.
 - **Profilage des Whales** : Analyse le comportement des gros investisseurs (Win-rate, Volume total).
 - **Sentiment du Marché** : Détermine si les "smart money" sont Bullish ou Bearish sur un événement.
 
-### 3. ⚡ Performance & Résilience
+### 4. ⚡ Performance & Résilience
 - **Architecture WebSocket** : Mises à jour en push instantané (plus de rafraîchissement manuel).
 - **Système de Cache** : Continue de fonctionner même si l'API Polymarket est en panne (Fallback automatique).
 - **Base de Données SQLite** : Historique complet des signaux et des prix pour analyse de tendance.
 
-### 4. 📰 Analyse de News Multi-sources
+### 5. 📰 Analyse de News Multi-sources
 - **Agrégateur IA** : Combine Google News, NewsAPI et SerpAPI.
 - **Analyse de Sentiment** : Corrélation entre les news et les mouvements de prix.
 - **Détection de Catalyseurs** : Identifie les événements majeurs impactant les marchés.
