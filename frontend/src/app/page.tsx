@@ -29,6 +29,7 @@ interface Signal {
     price_movement: number;
     liquidity: number;
     end_date: string;
+    polymarket_url: string;
     created_at: string;
 }
 
@@ -67,10 +68,6 @@ function formatTimeAgo(timestamp: string): string {
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
     return `${Math.floor(hours / 24)}d ago`;
-}
-
-function getPolymarketUrl(slug: string): string {
-    return `https://polymarket.com/event/${slug}`;
 }
 
 // ============ Settings Panel ============
@@ -233,7 +230,7 @@ function SettingsPanel({
 }
 
 // ============ Signal Card ============
-function SignalCard({ signal }: { signal: Signal }) {
+function SignalCard({ signal, showScore = true }: { signal: Signal; showScore?: boolean }) {
     const levelConfig = {
         watch: {
             border: 'border-gray-500/30',
@@ -281,10 +278,12 @@ function SignalCard({ signal }: { signal: Signal }) {
                     </div>
 
                     {/* Score */}
-                    <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-white/10">
-                        <span className="text-lg font-bold text-white">{scoreOn10}</span>
-                        <span className="text-xs text-gray-400">/10</span>
-                    </div>
+                    {showScore && (
+                        <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-white/10">
+                            <span className="text-lg font-bold text-white">{scoreOn10}</span>
+                            <span className="text-xs text-gray-400">/10</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Question */}
@@ -341,7 +340,7 @@ function SignalCard({ signal }: { signal: Signal }) {
 
                     {/* Open on Polymarket Button */}
                     <a
-                        href={getPolymarketUrl(signal.slug)}
+                        href={signal.polymarket_url || `https://polymarket.com/event/${signal.slug}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="
@@ -409,21 +408,30 @@ export default function Dashboard() {
         minScore: 0,
         showWatchLevel: true,
     });
+    const [activeTab, setActiveTab] = useState<'scanner' | 'equilibrage'>('scanner');
 
     // WebSocket connection for real-time updates
-    const { isConnected } = useWebSocket({
-        onSignalsUpdate: (newSignals, cached, cacheAge, wsError) => {
-            if (isLive && newSignals.length > 0) {
-                setSignals(newSignals);
-                setLastUpdate(new Date());
-                if (wsError) {
-                    setError(wsError);
-                }
+    const onSignalsUpdate = useCallback((newSignals: any[], cached: boolean, cacheAge: number | null, wsError: string | null) => {
+        // Only update signals from WS if we are in 'scanner' mode
+        // (WS broadcasts default scanner results, not Equilibrage results)
+        if (activeTab !== 'scanner') return;
+
+        if (isLive && newSignals.length > 0) {
+            setSignals(newSignals);
+            setLastUpdate(new Date());
+            if (wsError) {
+                setError(wsError);
             }
-        },
-        onWhaleTrade: (trade) => {
-            setWhaleTrades(prev => [trade, ...prev].slice(0, 20));
         }
+    }, [isLive, activeTab]);
+
+    const onWhaleTrade = useCallback((trade: any) => {
+        setWhaleTrades(prev => [trade, ...prev].slice(0, 20));
+    }, []);
+
+    const { isConnected } = useWebSocket({
+        onSignalsUpdate,
+        onWhaleTrade
     });
 
     // Fetch whale trades
@@ -445,7 +453,13 @@ export default function Dashboard() {
     const fetchSignals = useCallback(async () => {
         try {
             setError(null);
-            const response = await fetch('/api/signals/');
+
+            // Choose endpoint based on tab
+            const endpoint = activeTab === 'equilibrage'
+                ? '/api/signals/equilibrage'
+                : '/api/signals/';
+
+            const response = await fetch(endpoint);
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
@@ -467,7 +481,7 @@ export default function Dashboard() {
             setError('Backend non connecté. Lancez le backend avec LANCER.command');
             setIsLoading(false);
         }
-    }, []);
+    }, [activeTab]);
 
     // Initial fetch
     useEffect(() => {
@@ -475,19 +489,29 @@ export default function Dashboard() {
         fetchWhaleTrades();
     }, [fetchSignals, fetchWhaleTrades]);
 
-    // Polling
+    // Polling - Logic adapted for tabs
     useEffect(() => {
+        // If Scanner Tab AND WS connected: NO Poll (WS handles it)
+        if (activeTab === 'scanner' && isConnected && isLive) return;
+
+        // If Equilibrage Tab: ALWAYS Poll (WS does not cover it)
+        // If Scanner Tab AND Not Connected: Poll
+
         if (!isLive) return;
 
+        console.log(`⏱️ Polling active (${activeTab})`);
         const interval = setInterval(() => {
             fetchSignals();
             fetchWhaleTrades();
         }, 30000);
         return () => clearInterval(interval);
-    }, [isLive, fetchSignals, fetchWhaleTrades]);
+    }, [isLive, isConnected, fetchSignals, fetchWhaleTrades, activeTab]);
 
     // Filter signals based on settings
     const filteredSignals = signals.filter(signal => {
+        // Equilibrage tab has no client-side filtering (backend does it)
+        if (activeTab === 'equilibrage') return true;
+
         const scoreOn10 = Math.round(signal.score / 10);
         if (scoreOn10 < settings.minScore) return false;
         if (signal.whale_count < settings.minWhaleCount) return false;
@@ -538,8 +562,8 @@ export default function Dashboard() {
 
                         {/* WebSocket Status */}
                         <div className={`flex items-center gap-1 px-2 py-2 rounded-lg text-xs ${isConnected
-                                ? 'text-sky-400'
-                                : 'text-gray-500'
+                            ? 'text-sky-400'
+                            : 'text-gray-500'
                             }`} title={isConnected ? 'WebSocket connecté' : 'WebSocket déconnecté'}>
                             {isConnected ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
                         </div>
@@ -623,23 +647,60 @@ export default function Dashboard() {
                 {/* Signals Grid */}
                 {!isLoading && (
                     <>
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
                             <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                 <Zap className="w-5 h-5 text-sky-400" />
-                                Signaux ({filteredSignals.length})
+                                {activeTab === 'equilibrage' ? 'Opportunités Équilibrage (45-55%)' : 'Signaux Scanner'}
+                                <span className="ml-2 px-2 py-0.5 rounded-full bg-white/10 text-sm font-normal text-gray-400">
+                                    {filteredSignals.length}
+                                </span>
                             </h2>
+
+                            {/* Tabs */}
+                            <div className="flex p-1 bg-white/5 rounded-xl border border-white/5">
+                                <button
+                                    onClick={() => setActiveTab('scanner')}
+                                    className={`
+                                        px-4 py-1.5 rounded-lg text-sm font-medium transition-all
+                                        ${activeTab === 'scanner'
+                                            ? 'bg-sky-500/20 text-sky-400 shadow-sm'
+                                            : 'text-gray-400 hover:text-white hover:bg-white/5'}
+                                    `}
+                                >
+                                    Scanner
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('equilibrage')}
+                                    className={`
+                                        px-4 py-1.5 rounded-lg text-sm font-medium transition-all
+                                        ${activeTab === 'equilibrage'
+                                            ? 'bg-purple-500/20 text-purple-400 shadow-sm'
+                                            : 'text-gray-400 hover:text-white hover:bg-white/5'}
+                                    `}
+                                >
+                                    Équilibrage (45-55%)
+                                </button>
+                            </div>
                         </div>
 
                         {filteredSignals.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-16 text-center">
                                 <Filter className="w-12 h-12 text-gray-600 mb-4" />
-                                <h3 className="text-lg font-medium text-gray-400 mb-2">Aucun signal</h3>
-                                <p className="text-sm text-gray-500">Ajustez les paramètres pour voir plus de résultats</p>
+                                <h3 className="text-lg font-medium text-gray-400 mb-2">Aucun signal trouvé</h3>
+                                <p className="text-sm text-gray-500">
+                                    {activeTab === 'equilibrage'
+                                        ? "Aucun marché ne se trouve actuellement dans la zone 45-55%."
+                                        : "Ajustez les paramètres pour voir plus de résultats."}
+                                </p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                 {filteredSignals.map((signal) => (
-                                    <SignalCard key={signal.id} signal={signal} />
+                                    <SignalCard
+                                        key={signal.id}
+                                        signal={signal}
+                                        showScore={activeTab !== 'equilibrage'}
+                                    />
                                 ))}
                             </div>
                         )}

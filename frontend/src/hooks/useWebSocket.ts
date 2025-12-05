@@ -23,6 +23,14 @@ export function useWebSocket(options: UseWebSocketOptions) {
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Store latest callbacks in a ref to avoid reconnecting when they change
+    const callbacksRef = useRef(options);
+
+    // Update callbacks whenever options change
+    useEffect(() => {
+        callbacksRef.current = options;
+    }, [options]);
+
     const connect = useCallback(() => {
         // Don't reconnect if already connected
         if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -41,7 +49,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
                 console.log('🔌 WebSocket connected');
                 setIsConnected(true);
                 setConnectionError(null);
-                options.onConnect?.();
+                callbacksRef.current.onConnect?.();
 
                 // Start ping interval to keep connection alive
                 pingIntervalRef.current = setInterval(() => {
@@ -58,7 +66,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
                     switch (message.type) {
                         case 'signals_update':
                             if (message.data) {
-                                options.onSignalsUpdate?.(
+                                callbacksRef.current.onSignalsUpdate?.(
                                     message.data.signals || [],
                                     message.data.cached || false,
                                     message.data.cache_age || null,
@@ -69,7 +77,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
 
                         case 'whale_trade':
                             if (message.data) {
-                                options.onWhaleTrade?.(message.data);
+                                callbacksRef.current.onWhaleTrade?.(message.data);
                             }
                             break;
 
@@ -92,7 +100,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
             ws.onclose = () => {
                 console.log('🔌 WebSocket disconnected');
                 setIsConnected(false);
-                options.onDisconnect?.();
+                callbacksRef.current.onDisconnect?.();
 
                 // Clear ping interval
                 if (pingIntervalRef.current) {
@@ -115,7 +123,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
             console.error('Failed to create WebSocket:', error);
             setConnectionError('Failed to connect to WebSocket');
         }
-    }, [options]);
+    }, []); // Empty dependency array - connect function never changes
 
     const disconnect = useCallback(() => {
         // Clear reconnect timeout

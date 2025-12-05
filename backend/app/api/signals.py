@@ -38,6 +38,7 @@ class Signal(BaseModel):
     price_movement: float
     liquidity: float
     end_date: str
+    polymarket_url: str
     created_at: datetime
 
 
@@ -51,30 +52,53 @@ class SignalResponse(BaseModel):
 
 
 async def fetch_markets_from_api():
-    """Fetch markets directly from Polymarket API."""
+    """Fetch ALL markets from Polymarket API using pagination."""
     async with httpx.AsyncClient(timeout=30.0) as client:
+        all_markets = []
+        offset = 0
+        limit = 1000
+        base_url = "https://gamma-api.polymarket.com/markets"
+        
         try:
-            urls = [
-                "https://gamma-api.polymarket.com/markets?limit=100&active=true&closed=false",
-                "https://gamma-api.polymarket.com/markets?limit=100&closed=false",
-            ]
-            
-            for url in urls:
+            while True:
+                # Fetch only active and non-closed markets
+                url = f"{base_url}?limit={limit}&offset={offset}&active=true&closed=false"
+                
                 try:
                     response = await client.get(url)
                     if response.status_code == 200:
                         data = response.json()
-                        if isinstance(data, list) and len(data) > 0:
-                            return data, None
-                except Exception:
-                    continue
+                        
+                        if not isinstance(data, list) or len(data) == 0:
+                            break
+                            
+                        all_markets.extend(data)
+                        print(f"Fetched {len(data)} markets (Offset: {offset})")
+                        
+                        if len(data) < limit:
+                            break
+                            
+                        offset += limit
+                        
+                        # Safety break to avoid infinite loops if something goes wrong
+                        if offset > 10000:
+                            break
+                    else:
+                        print(f"API Error {response.status_code}: {response.text}")
+                        break
+                        
+                except Exception as e:
+                    print(f"Error checking url {url}: {e}")
+                    break
             
-            return None, "API Polymarket indisponible (500)"
+            if len(all_markets) > 0:
+                print(f"Total markets fetched: {len(all_markets)}")
+                return all_markets, None
+                
+            return None, "Aucun marché trouvé (API error?)"
             
-        except httpx.TimeoutException:
-            return None, "Timeout connexion Polymarket"
         except Exception as e:
-            return None, f"Erreur: {str(e)}"
+            return None, f"Erreur globale: {str(e)}"
 
 
 async def fetch_markets():
@@ -191,6 +215,12 @@ def market_to_signal(market: dict) -> Signal:
     if not slug and market.get("events"):
         slug = market["events"][0].get("slug", "")
     
+    # Generate URL
+    if slug:
+        polymarket_url = f"https://polymarket.com/event/{slug}"
+    else:
+        polymarket_url = "https://polymarket.com"
+
     vol_24h = market.get("volume24hr", 0) or 0
     liquidity = market.get("liquidityNum", 0) or 0
     
@@ -214,6 +244,7 @@ def market_to_signal(market: dict) -> Signal:
         price_movement=price_change,
         liquidity=liquidity,
         end_date=market.get("endDateIso", ""),
+        polymarket_url=polymarket_url,
         created_at=datetime.utcnow()
     )
 
@@ -260,6 +291,51 @@ async def get_signals(
     
     # Sort by score
     signals.sort(key=lambda x: x.score, reverse=True)
+    
+    return SignalResponse(
+        signals=signals[:limit],
+        total=len(signals),
+        cached=is_cached,
+        cache_age=cache_age,
+        error=error
+    )
+
+
+@router.get("/equilibrage", response_model=SignalResponse)
+async def get_equilibrage_signals(
+    limit: int = Query(default=100, le=500)
+):
+    """
+    Get 'Equilibrage' signals:
+    - YES price between 0.45 and 0.55
+    - Sorted by volume
+    """
+    markets, error, is_cached, cache_age = await fetch_markets()
+    
+    if not markets and error:
+        return SignalResponse(signals=[], total=0, cached=False, error=error)
+    
+    signals = []
+    for market in markets:
+        try:
+            if market.get("closed") or not market.get("question"):
+                continue
+            
+            # Get basic signal to check prices
+            signal = market_to_signal(market)
+            
+            # Filter for Equilibrage: 45% <= price <= 55%
+            # We strictly check both yes_price and no_price to be safe, 
+            # though usually if yes is 0.45, no is 0.55.
+            if not (0.45 <= signal.yes_price <= 0.55):
+                continue
+                
+            signals.append(signal)
+        except Exception:
+            continue
+    
+    # Sort by volume (liquidity/action is more important here than score)
+    signals.sort(key=lambda x: x.volume_24h, reverse=True)
     
     return SignalResponse(
         signals=signals[:limit],
