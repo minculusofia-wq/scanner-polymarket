@@ -7,6 +7,7 @@ import {
     ArrowUpRight, ArrowDownRight, Eye, Clock, Loader2
 } from 'lucide-react';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import MonteCarloPanel from '@/components/MonteCarloPanel';
 
 // ============ Types ============
 interface Signal {
@@ -22,6 +23,7 @@ interface Signal {
     volume_score: number;
     news_score: number;
     whale_count: number;
+    unique_whale_count: number;
     volume_24h: number;
     news_count: number;
     yes_price: number;
@@ -36,7 +38,8 @@ interface Signal {
 }
 
 interface ScannerSettings {
-    minWhaleCount: number;
+    minWhaleCount: number; // Min Trades
+    minUniqueWhales: number; // Min Unique Whales
     minVolumeUsd: number;
     minLiquidity: number;
     maxSpread: number; // Max spread allowed in cents
@@ -326,8 +329,13 @@ function SignalCard({ signal, showScore = true }: { signal: Signal; showScore?: 
                 <div className="grid grid-cols-3 gap-2 mb-4">
                     <div className="bg-white/5 rounded-lg p-2 text-center">
                         <Fish className="w-3 h-3 mx-auto text-sky-400 mb-1" />
-                        <div className="text-xs text-gray-500">Whales</div>
-                        <div className="text-sm font-bold text-white">{signal.whale_count}</div>
+                        <div className="text-xs text-gray-500">Whales (Uniq)</div>
+                        <div className="text-sm font-bold text-white">
+                            {signal.whale_count}
+                            <span className="text-xs font-normal text-gray-400 ml-1">
+                                ({signal.unique_whale_count || 0})
+                            </span>
+                        </div>
                     </div>
                     <div className="bg-white/5 rounded-lg p-2 text-center">
                         <TrendingUp className="w-3 h-3 mx-auto text-green-400 mb-1" />
@@ -415,6 +423,7 @@ export default function Dashboard() {
     // Independent Settings States
     const [scannerSettings, setScannerSettings] = useState<ScannerSettings>({
         minWhaleCount: 0,
+        minUniqueWhales: 0,
         minVolumeUsd: 0,
         minLiquidity: 0,
         maxSpread: 0.10, // Permissive for Scanner
@@ -426,6 +435,7 @@ export default function Dashboard() {
 
     const [proInsightSettings, setProInsightSettings] = useState<ScannerSettings>({
         minWhaleCount: 0,
+        minUniqueWhales: 0,
         minVolumeUsd: 1000,
         minLiquidity: 1000,
         maxSpread: 0.05, // Stricter for Pro (5 cents)
@@ -435,7 +445,7 @@ export default function Dashboard() {
         showWatchLevel: false // Hide noise by default
     });
 
-    const [activeTab, setActiveTab] = useState<'scanner' | 'equilibrage' | 'hot'>('scanner');
+    const [activeTab, setActiveTab] = useState<'scanner' | 'equilibrage' | 'hot' | 'quant'>('scanner');
     // Use strings to allow empty '' state
     const [hotSettings, setHotSettings] = useState({ amount: '', profit: '', strategy: 'whale' });
 
@@ -500,9 +510,9 @@ export default function Dashboard() {
 
             let endpoint = '/api/signals/';
             if (activeTab === 'equilibrage') {
-                endpoint = '/api/signals/equilibrage';
+                endpoint = '/api/signals/equilibrage/';
             } else if (activeTab === 'hot') {
-                endpoint = `/api/signals/hot?strategy=${hotSettings.strategy}`;
+                endpoint = `/api/signals/hot/?strategy=${hotSettings.strategy}`;
             }
 
             const response = await fetch(endpoint);
@@ -580,6 +590,9 @@ export default function Dashboard() {
 
         // 4. Min Whale Count (Added)
         if (signal.whale_count < activeSettings.minWhaleCount) return false;
+
+        // 5. Min Unique Whales (Added)
+        if (signal.unique_whale_count < (activeSettings.minUniqueWhales || 0)) return false;
 
         // 5. Max Spread (Advanced)
         if (activeSettings.maxSpread > 0 && signal.spread > activeSettings.maxSpread) return false;
@@ -727,11 +740,14 @@ export default function Dashboard() {
                             <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                 <Zap className="w-5 h-5 text-sky-400" />
                                 {activeTab === 'scanner' && 'Signaux Scanner'}
-                                {activeTab === 'equilibrage' ? 'Opportunités Équilibrage (45-55%)' : 'Signaux Scanner'}
-                                {activeTab === 'hot' && '🔥 Action Scanner'}
-                                <span className="ml-2 px-2 py-0.5 rounded-full bg-white/10 text-sm font-normal text-gray-400">
-                                    {filteredSignals.length}
-                                </span>
+                                {activeTab === 'equilibrage' && 'Opportunités Équilibrage (45-55%)'}
+                                {activeTab === 'hot' && '🔥 Pro Insights'}
+                                {activeTab === 'quant' && '📊 Analyse Quantitative'}
+                                {activeTab !== 'quant' && (
+                                    <span className="ml-2 px-2 py-0.5 rounded-full bg-white/10 text-sm font-normal text-gray-400">
+                                        {filteredSignals.length}
+                                    </span>
+                                )}
                             </h2>
 
                             {/* Tabs */}
@@ -769,6 +785,17 @@ export default function Dashboard() {
                                 >
                                     🔎 Pro Insights
                                 </button>
+                                <button
+                                    onClick={() => setActiveTab('quant')}
+                                    className={`
+                                        px-4 py-1.5 rounded-lg text-sm font-medium transition-all
+                                        ${activeTab === 'quant'
+                                            ? 'bg-fuchsia-500/20 text-fuchsia-400 shadow-sm'
+                                            : 'text-gray-400 hover:text-white hover:bg-white/5'}
+                                    `}
+                                >
+                                    📊 Quant
+                                </button>
                             </div>
                         </div>
 
@@ -802,9 +829,35 @@ export default function Dashboard() {
                                     {/* 2. Dynamic Info Panel */}
                                     <div className="flex items-center gap-4 bg-black/20 p-3 rounded-lg border border-white/5 min-h-[50px]">
                                         {hotSettings.strategy === 'whale' && (
-                                            <div className="flex items-center gap-2 text-indigo-400 animate-in fade-in">
-                                                <span className="font-bold">CALL:</span>
-                                                <span>Suivez la "Smart Money". Ces marchés ont des volumes massifs (&gt;25k$/24h) signalant une action imminente.</span>
+                                            <div className="flex flex-col gap-3 w-full animate-in fade-in">
+                                                <div className="flex items-center gap-2 text-indigo-400">
+                                                    <span className="font-bold">CALL:</span>
+                                                    <span>Suivez la "Smart Money". Ces marchés ont des volumes massifs ({'>'}25k$/24h).</span>
+                                                </div>
+
+                                                {/* Whale Parameters */}
+                                                <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-white/5">
+                                                    <div className="flex items-center gap-2">
+                                                        <label className="text-xs text-gray-400">Min Trades:</label>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={proInsightSettings.minWhaleCount}
+                                                            onChange={(e) => setProInsightSettings(prev => ({ ...prev, minWhaleCount: Number(e.target.value) }))}
+                                                            className="w-16 bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-indigo-500"
+                                                        />
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <label className="text-xs text-gray-400">Whales Uniques:</label>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={proInsightSettings.minUniqueWhales}
+                                                            onChange={(e) => setProInsightSettings(prev => ({ ...prev, minUniqueWhales: Number(e.target.value) }))}
+                                                            className="w-16 bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-indigo-500"
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                         )}
                                         {hotSettings.strategy === 'yield' && (
@@ -824,7 +877,12 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {filteredSignals.length === 0 ? (
+                        {/* Quant Analysis Panel */}
+                        {activeTab === 'quant' ? (
+                            <div className="bg-[#151921] border border-fuchsia-500/20 rounded-xl p-6 animate-in fade-in slide-in-from-top-2">
+                                <MonteCarloPanel />
+                            </div>
+                        ) : filteredSignals.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-16 text-center">
                                 <Filter className="w-12 h-12 text-gray-600 mb-4" />
                                 <h3 className="text-lg font-medium text-gray-400 mb-2">Aucun signal trouvé</h3>
@@ -842,10 +900,9 @@ export default function Dashboard() {
                                     <SignalCard
                                         key={signal.id}
                                         signal={signal}
-                                        // Show score only in Scanner mode.
-                                        // In Hot mode, we show ROI in the 'reason' field (handled by backend string),
-                                        // so we might want to hide the standard score.
-                                        showScore={activeTab === 'scanner'}
+                                        // Show score in Scanner and Equilibrage tabs.
+                                        // In Pro Insights (hot) mode, we show strategy-specific calls in direction field.
+                                        showScore={activeTab !== 'hot'}
                                     />
                                 ))}
                             </div>

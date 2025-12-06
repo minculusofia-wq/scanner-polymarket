@@ -4,7 +4,7 @@ Works without Redis for simplicity, with automatic persistence.
 """
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from pathlib import Path
 
@@ -48,10 +48,16 @@ class CacheService:
                         key = data.get("key")
                         if key:
                             self._memory_cache[key] = data.get("value")
-                            self._cache_times[key] = datetime.fromisoformat(data.get("cached_at", datetime.utcnow().isoformat()))
-                except Exception:
+                            # Parse cached_at and ensure it's timezone-aware
+                            cached_at_str = data.get("cached_at", datetime.now(timezone.utc).isoformat())
+                            parsed_time = datetime.fromisoformat(cached_at_str)
+                            # Ensure timezone-aware (convert naive to UTC)
+                            if parsed_time.tzinfo is None:
+                                parsed_time = parsed_time.replace(tzinfo=timezone.utc)
+                            self._cache_times[key] = parsed_time
+                except (json.JSONDecodeError, KeyError, ValueError):
                     continue
-        except Exception:
+        except OSError:
             pass
     
     def _save_to_disk(self, key: str, value: Any):
@@ -62,9 +68,9 @@ class CacheService:
                 json.dump({
                     "key": key,
                     "value": value,
-                    "cached_at": datetime.utcnow().isoformat()
+                    "cached_at": datetime.now(timezone.utc).isoformat()
                 }, f)
-        except Exception as e:
+        except (OSError, TypeError) as e:
             print(f"Cache write error: {e}")
     
     def get(self, key: str, max_age_seconds: int = 300) -> Optional[Any]:
@@ -83,7 +89,7 @@ class CacheService:
         
         cache_time = self._cache_times.get(key)
         if cache_time:
-            age = (datetime.utcnow() - cache_time).total_seconds()
+            age = (datetime.now(timezone.utc) - cache_time).total_seconds()
             if age > max_age_seconds:
                 return None
         
@@ -103,7 +109,7 @@ class CacheService:
         """Get age of cached data in seconds."""
         cache_time = self._cache_times.get(key)
         if cache_time:
-            return int((datetime.utcnow() - cache_time).total_seconds())
+            return int((datetime.now(timezone.utc) - cache_time).total_seconds())
         return None
     
     def set(self, key: str, value: Any, persist: bool = True):
@@ -116,7 +122,7 @@ class CacheService:
             persist: Whether to save to disk (default True)
         """
         self._memory_cache[key] = value
-        self._cache_times[key] = datetime.utcnow()
+        self._cache_times[key] = datetime.now(timezone.utc)
         
         if persist:
             self._save_to_disk(key, value)
@@ -138,7 +144,7 @@ class CacheService:
         for cache_file in self._cache_dir.glob("*.json"):
             try:
                 cache_file.unlink()
-            except:
+            except OSError:
                 pass
     
     def get_stats(self) -> dict:

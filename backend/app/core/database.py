@@ -3,7 +3,7 @@ Database Service - SQLite for signal history and analytics.
 """
 import sqlite3
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from contextlib import contextmanager
@@ -154,7 +154,7 @@ class Database:
                     trade.get('side', 'YES'),
                     trade.get('size_usd', 0),
                     trade.get('price', 0.5),
-                    trade.get('timestamp', datetime.utcnow().isoformat())
+                    trade.get('timestamp', datetime.now(timezone.utc).isoformat())
                 ))
                 return True
             except sqlite3.IntegrityError:
@@ -164,7 +164,7 @@ class Database:
         """Get signal history for a market."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            since = datetime.utcnow() - timedelta(hours=hours)
+            since = datetime.now(timezone.utc) - timedelta(hours=hours)
             
             cursor.execute('''
                 SELECT * FROM signal_snapshots 
@@ -178,7 +178,7 @@ class Database:
         """Get price history for a market."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            since = datetime.utcnow() - timedelta(hours=hours)
+            since = datetime.now(timezone.utc) - timedelta(hours=hours)
             
             cursor.execute('''
                 SELECT * FROM market_history 
@@ -192,7 +192,7 @@ class Database:
         """Get markets with biggest score changes."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            since = datetime.utcnow() - timedelta(hours=hours)
+            since = datetime.now(timezone.utc) - timedelta(hours=hours)
             
             # Get markets with multiple snapshots and calculate score change
             cursor.execute('''
@@ -256,7 +256,7 @@ class Database:
         """Remove data older than specified days."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            since = datetime.utcnow() - timedelta(days=days)
+            since = datetime.now(timezone.utc) - timedelta(days=days)
             
             cursor.execute('DELETE FROM signal_snapshots WHERE snapshot_time < ?', (since.isoformat(),))
             cursor.execute('DELETE FROM market_history WHERE recorded_at < ?', (since.isoformat(),))

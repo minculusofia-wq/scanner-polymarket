@@ -31,6 +31,7 @@ class Signal(BaseModel):
     volume_score: int
     news_score: int
     whale_count: int
+    unique_whale_count: int
     volume_24h: float
     news_count: int
     yes_price: float
@@ -98,9 +99,9 @@ async def fetch_markets_from_api():
                 return all_markets, None
                 
             return None, "Aucun marché trouvé (API error?)"
-            
         except Exception as e:
-            return None, f"Erreur globale: {str(e)}"
+            print(f"Error fetching markets: {e}")
+            return None, str(e)
 
 
 async def fetch_markets():
@@ -140,11 +141,15 @@ def calculate_score(market: dict) -> tuple[int, str]:
     """
     score = 0
     
-    # 1. Base Liquidity (Max 20 pts) - Is it tradeable size?
+    # 1. Liquidity (Max 30 pts)
     liquidity = float(market.get("liquidityNum") or 0)
-    if liquidity > 500000:
-        score += 20
+    if liquidity > 1000000:
+        score += 30
+    elif liquidity > 500000:
+        score += 25
     elif liquidity > 100000:
+        score += 20
+    elif liquidity > 50000:
         score += 15
     elif liquidity > 10000:
         score += 10
@@ -192,7 +197,7 @@ def calculate_score(market: dict) -> tuple[int, str]:
                 score -= 30
             elif spread > 0.03:
                 score -= 15
-    except:
+    except (ValueError, TypeError, KeyError):
         pass # Ignore spread if data missing
         
     # 5. Dead Market Penalty
@@ -215,15 +220,13 @@ def calculate_score(market: dict) -> tuple[int, str]:
     return score, level
 
 
-def parse_prices(market: dict) -> tuple[float, float]:
-    """Parse YES/NO prices."""
+def parse_prices(market: dict):
+    """Parse prices safely."""
     try:
-        prices_str = market.get("outcomePrices", '["0.5", "0.5"]')
-        if isinstance(prices_str, str):
-            prices = json.loads(prices_str)
-        else:
-            prices = prices_str
-        return float(prices[0]), float(prices[1])
+        outcome_prices = json.loads(market.get("outcomePrices", "[\"0\", \"0\"]"))
+        yes_price = float(outcome_prices[0]) if len(outcome_prices) > 0 else 0
+        no_price = float(outcome_prices[1]) if len(outcome_prices) > 1 else 0
+        return yes_price, no_price
     except:
         return 0.5, 0.5
 
@@ -261,7 +264,7 @@ def market_to_signal(market: dict) -> Signal:
         best_ask = float(market.get("bestAsk") or 0)
         if best_bid > 0 and best_ask > 0:
             spread = best_ask - best_bid
-    except:
+    except (ValueError, TypeError, KeyError):
         pass
 
     # Calculate Time Remaining
@@ -275,8 +278,12 @@ def market_to_signal(market: dict) -> Signal:
                 end_date = end_date.replace(tzinfo=timezone.utc)
             delta = end_date - datetime.now(timezone.utc)
             hours_remaining = max(0.0, delta.total_seconds() / 3600.0)
-    except:
+    except (ValueError, TypeError, KeyError):
         pass
+
+    whale_count = max(1, int(vol_24h / 10000))
+    # Heuristic: 40% of trades are unique whales, capped at least 1
+    unique_whale_count = max(1, int(whale_count * 0.4))
 
     return Signal(
         id=str(market.get("id", "")),
@@ -290,7 +297,8 @@ def market_to_signal(market: dict) -> Signal:
         whale_score=min(int(vol_24h / 1000), 100),
         volume_score=min(int(liquidity / 10000), 100),
         news_score=50,
-        whale_count=max(1, int(vol_24h / 10000)),
+        whale_count=whale_count,
+        unique_whale_count=unique_whale_count,
         volume_24h=vol_24h,
         news_count=0,
         yes_price=yes_price,
@@ -510,7 +518,7 @@ async def get_hot_signals(
                     
                     if spread >= 0.03:
                         opportunity_side = "SCALP"
-                        display_msg = f"SCALP SPREAD: {spread:.2f}c"
+                        display_msg = f"SCALP SPREAD: {spread * 100:.1f}c"
                         sort_score = spread
 
                 

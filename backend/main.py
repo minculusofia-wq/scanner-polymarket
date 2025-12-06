@@ -11,7 +11,7 @@ import os
 # Load environment variables
 load_dotenv()
 
-from app.api import signals, whales, markets, volume, history, news
+from app.api import signals, whales, markets, volume, history, news, monte_carlo
 from app.core.websocket import manager, MessageTypes
 from app.core.database import db
 
@@ -99,6 +99,7 @@ app.include_router(markets.router, prefix="/api/markets", tags=["Markets"])
 app.include_router(volume.router, prefix="/api/volume", tags=["Volume"])
 app.include_router(history.router, prefix="/api/history", tags=["History"])
 app.include_router(news.router, prefix="/api/news", tags=["News"])
+app.include_router(monte_carlo.router, prefix="/api/monte-carlo", tags=["Monte Carlo"])
 
 
 @app.get("/")

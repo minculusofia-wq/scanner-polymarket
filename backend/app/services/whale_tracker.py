@@ -3,7 +3,7 @@ Whale Tracker Service - Detect and track large traders on Polymarket.
 """
 import httpx
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, asdict
 from collections import defaultdict
@@ -80,7 +80,7 @@ class WhaleTracker:
                 try:
                     t['timestamp'] = datetime.fromisoformat(t['timestamp'])
                     self._trades.append(WhaleTrade(**t))
-                except:
+                except (ValueError, KeyError, TypeError):
                     pass
         
         cached_profiles = cache.get_fallback(CACHE_KEY_PROFILES)
@@ -90,7 +90,7 @@ class WhaleTracker:
                 try:
                     p['last_seen'] = datetime.fromisoformat(p['last_seen'])
                     self._profiles[addr] = WhaleProfile(**p)
-                except:
+                except (ValueError, KeyError, TypeError):
                     pass
     
     def _save_to_cache(self):
@@ -150,7 +150,7 @@ class WhaleTracker:
             
             # Create whale trade
             whale_trade = WhaleTrade(
-                id=trade.get("id", str(datetime.utcnow().timestamp())),
+                id=trade.get("id", str(datetime.now(timezone.utc).timestamp())),
                 trader=trade.get("maker", trade.get("taker", "unknown"))[:10] + "...",
                 market_id=trade.get("market", ""),
                 market_question=market_info.get("question", "Unknown") if market_info else "Unknown",
@@ -158,7 +158,7 @@ class WhaleTracker:
                 side="YES" if trade.get("side") == "BUY" else "NO",
                 size_usd=size_usd,
                 price=price,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
             
             # Add to trades list
@@ -273,7 +273,7 @@ class WhaleTracker:
             side=side,
             size_usd=size_usd,
             price=price,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         
         self._trades.append(trade)
