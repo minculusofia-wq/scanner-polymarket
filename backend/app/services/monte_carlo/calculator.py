@@ -9,6 +9,10 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 
 from app.services.monte_carlo.binance_data import get_binance_ohlcv
+from app.services.monte_carlo.yahoo_data import get_yahoo_ohlcv
+from app.services.monte_carlo.sentiment import get_crypto_fear_and_greed
+from app.services.monte_carlo.tradfi_sentiment import get_tradfi_sentiment
+from app.services.monte_carlo.macro import check_high_impact_events
 from app.services.monte_carlo.bootstrap_model import BootstrapOptionModel
 from app.core.cache import cache
 
@@ -48,6 +52,10 @@ class EdgeOpportunity:
     end_date: str
     current_price: float
     
+    # Sentiment
+    sentiment_score: Optional[float] = None  # 0-100
+    sentiment_label: Optional[str] = None    # "Extreme Fear", etc.
+
     def to_dict(self) -> dict:
         return {
             "market_id": self.market_id,
@@ -66,6 +74,8 @@ class EdgeOpportunity:
             "target_price": self.target_price,
             "end_date": self.end_date,
             "current_price": self.current_price,
+            "sentiment_score": self.sentiment_score,
+            "sentiment_label": self.sentiment_label,
         }
 
 
@@ -95,12 +105,41 @@ class MonteCarloCalculator:
             r"solana.*?hit.*?([\d,]+)",
         ],
     }
+
+    TRADFI_PATTERNS = {
+        "SPX": [
+            r"s\&p\s*500.*?\s*([\d,]+)",
+            r"spx.*?\s*([\d,]+)",
+            r"spy.*?\s*([\d,]+)",
+        ],
+        "NDX": [
+            r"nasdaq.*?\s*([\d,]+)",
+            r"ndx.*?\s*([\d,]+)",
+            r"qqq.*?\s*([\d,]+)",
+        ],
+        "GOLD": [
+            r"gold.*?\s*([\d,]+)",
+            r"xau.*?\s*([\d,]+)",
+        ],
+        "OIL": [
+            r"crude.*?\s*([\d,]+)",
+            r"oil.*?\s*([\d,]+)",
+            r"wti.*?\s*([\d,]+)",
+            r"brent.*?\s*([\d,]+)",
+        ],
+    }
     
     ASSET_TO_SYMBOL = {
         "BTC": "BTCUSDT",
         "ETH": "ETHUSDT",
         "SOL": "SOLUSDT",
+        "SPX": "^GSPC",
+        "NDX": "^IXIC",
+        "GOLD": "GC=F",
+        "OIL": "CL=F",
     }
+    
+
     
     def __init__(self, n_sims: int = 50_000):
         """
@@ -145,7 +184,20 @@ class MonteCarloCalculator:
                     except ValueError:
                         continue
         
-        print(f"[MC] No crypto pattern matched")
+        # Check for TradFi assets
+        for asset, patterns in self.TRADFI_PATTERNS.items():
+            for pattern in patterns:
+                match = re.search(pattern, question_lower)
+                if match:
+                    price_str = match.group(1).replace(",", "")
+                    print(f"[MC] Found match for {asset}: {price_str} (direction: {direction})")
+                    try:
+                        price = float(price_str)
+                        return (asset, price, direction)
+                    except ValueError:
+                        continue
+
+        print(f"[MC] No crypto or tradfi pattern matched")
         return None
     
     def _extract_end_date(self, question: str, end_date_iso: str) -> str:
@@ -181,8 +233,17 @@ class MonteCarloCalculator:
                 df['date'] = pd.to_datetime(df['date'])
                 df.set_index('date', inplace=True)
         else:
-            print(f"Fetching {symbol} data from Binance...")
-            df = await get_binance_ohlcv(symbol, "1h", 365 * 24)  # 1 year
+            if "USDT" in symbol:
+                print(f"Fetching {symbol} from Binance...")
+                df = await get_binance_ohlcv(symbol, "1h", 365 * 24)
+            else:
+                print(f"Fetching {symbol} from Yahoo...")
+                # Yahoo handles async internally or is fast enough for now
+                import asyncio
+                # Run sync yahoo fetch in thread executor to avoid blocking
+                loop = asyncio.get_event_loop()
+                df = await loop.run_in_executor(None, get_yahoo_ohlcv, symbol, "1h", "2y")
+
             # Cache as dict for JSON serialization - convert timestamps to strings
             cache_data = df.reset_index().copy()
             cache_data['date'] = cache_data['date'].astype(str)
@@ -219,8 +280,17 @@ class MonteCarloCalculator:
         
         model = await self.get_or_create_model(symbol)
         
-        # Run simulation
-        result = model.simulate(end_date)
+        # Check for High Impact Macro Events (Finnhub)
+        # Boost noise_std if big events are coming
+        macro_mult = 1.0
+        try:
+            macro_mult = await check_high_impact_events(days_ahead=7)
+        except Exception:
+            pass
+            
+        # Run simulation with macro adjustment
+        # Passing macro_mult as a noise multiplier (simplified for now)
+        result = model.simulate(end_date, noise_multiplier=macro_mult)
         
         # Calculate probability based on direction
         if direction == "below":
@@ -299,6 +369,30 @@ class MonteCarloCalculator:
         else:
             recommendation = "HOLD"
             confidence = "LOW"
+            
+        # Fetch sentiment
+        sentiment_score = None
+        sentiment_label = None
+        
+        # Crypto
+        if asset in ["BTC", "ETH", "SOL"]:
+            sentiment_data = await get_crypto_fear_and_greed()
+            sentiment_score = sentiment_data.get("score")
+            sentiment_label = sentiment_data.get("value_classification")
+        # TradFi
+        elif asset in ["SPX", "NDX", "GOLD", "OIL"]:
+            sym = self.ASSET_TO_SYMBOL.get(asset, "")
+            # Alpha Vantage expects tickers like SPY, GLD, USO not futures
+            # Mapping for AV Sentiment
+            av_ticker = sym
+            if asset == "SPX": av_ticker = "SPY"
+            if asset == "NDX": av_ticker = "QQQ"
+            if asset == "GOLD": av_ticker = "GLD"
+            if asset == "OIL": av_ticker = "USO"
+            
+            sentiment_data = await get_tradfi_sentiment(av_ticker)
+            sentiment_score = sentiment_data.get("score")
+            sentiment_label = sentiment_data.get("label")
         
         return EdgeOpportunity(
             market_id=market.get("id", market.get("market_id", "")),
@@ -317,6 +411,8 @@ class MonteCarloCalculator:
             target_price=target_price,
             end_date=end_date,
             current_price=mc_result["current_price"],
+            sentiment_score=sentiment_score,
+            sentiment_label=sentiment_label,
         )
 
 

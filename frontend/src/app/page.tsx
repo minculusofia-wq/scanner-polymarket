@@ -203,7 +203,7 @@ function SettingsPanel({
                                     onChange={(e) => setLocalSettings({ ...localSettings, minScore: Number(e.target.value) })}
                                     className="w-full bg-slate-900 border border-white/10 rounded-lg p-2 text-sm text-white"
                                 />
-                                <span className="text-xs text-gray-500">/100</span>
+                                <span className="text-xs text-gray-500">/10</span>
                             </div>
                         </div>
                     </div>
@@ -272,7 +272,7 @@ function SignalCard({ signal, showScore = true }: { signal: Signal; showScore?: 
     };
 
     const config = levelConfig[signal.level] || levelConfig.watch;
-    const scoreOn10 = Math.round(signal.score / 10);
+    const scoreOn10 = signal.score;
 
     return (
         <div className={`
@@ -441,20 +441,20 @@ export default function Dashboard() {
         maxSpread: 0.05, // Stricter for Pro (5 cents)
         maxTimeHours: 0,
         minNewsCount: 0,
-        minScore: 40, // Quality filter
-        showWatchLevel: false // Hide noise by default
+        minScore: 4, // Quality filter (now on 10)
+        showWatchLevel: true // Show all signals by default for Pro strategies
     });
 
-    const [activeTab, setActiveTab] = useState<'scanner' | 'equilibrage' | 'hot' | 'quant'>('scanner');
+    const [activeTab, setActiveTab] = useState<'scanner' | 'equilibrage' | 'hot' | 'quant' | 'contrarian'>('scanner');
     // Use strings to allow empty '' state
     const [hotSettings, setHotSettings] = useState({ amount: '', profit: '', strategy: 'whale' });
 
     // Computed Settings based on Tab
-    const activeSettings = activeTab === 'hot' ? proInsightSettings : scannerSettings;
+    const activeSettings = (activeTab === 'hot' || activeTab === 'contrarian') ? proInsightSettings : scannerSettings;
 
     // Update Handler
     const handleSettingsUpdate = (newSettings: ScannerSettings) => {
-        if (activeTab === 'hot') {
+        if (activeTab === 'hot' || activeTab === 'contrarian') {
             setProInsightSettings(newSettings);
         } else {
             setScannerSettings(newSettings);
@@ -513,6 +513,8 @@ export default function Dashboard() {
                 endpoint = '/api/signals/equilibrage/';
             } else if (activeTab === 'hot') {
                 endpoint = `/api/signals/hot/?strategy=${hotSettings.strategy}`;
+            } else if (activeTab === 'contrarian') {
+                endpoint = `/api/signals/hot/?strategy=fade`;
             }
 
             const response = await fetch(endpoint);
@@ -588,14 +590,23 @@ export default function Dashboard() {
         // 3. Min Liquidity
         if (signal.liquidity < activeSettings.minLiquidity) return false;
 
-        // 4. Min Whale Count (Added)
-        if (signal.whale_count < activeSettings.minWhaleCount) return false;
+        // Smart Filter Logic
+        const isProInsights = activeTab === 'hot';
+        const isWhaleStrategy = isProInsights && hotSettings.strategy === 'whale';
+        const isScalpStrategy = isProInsights && hotSettings.strategy === 'scalp';
 
-        // 5. Min Unique Whales (Added)
-        if (signal.unique_whale_count < (activeSettings.minUniqueWhales || 0)) return false;
+        // 4. Min Whale Count & Unique Whales
+        // Apply only if NOT Pro Insights (Scanner) OR if explicitly Whale Strategy
+        if (!isProInsights || isWhaleStrategy) {
+            if (signal.whale_count < activeSettings.minWhaleCount) return false;
+            if (signal.unique_whale_count < (activeSettings.minUniqueWhales || 0)) return false;
+        }
 
         // 5. Max Spread (Advanced)
-        if (activeSettings.maxSpread > 0 && signal.spread > activeSettings.maxSpread) return false;
+        // Disable max spread filter for Scalp strategy (it seeks spread)
+        if (!isScalpStrategy) {
+            if (activeSettings.maxSpread > 0 && signal.spread > activeSettings.maxSpread) return false;
+        }
 
         // 6. Time Horizon (Advanced)
         if (activeSettings.maxTimeHours > 0) {
@@ -742,6 +753,7 @@ export default function Dashboard() {
                                 {activeTab === 'scanner' && 'Signaux Scanner'}
                                 {activeTab === 'equilibrage' && 'Opportunités Équilibrage (45-55%)'}
                                 {activeTab === 'hot' && '🔥 Pro Insights'}
+                                {activeTab === 'contrarian' && '🐻 Contrarian (Fade Hype)'}
                                 {activeTab === 'quant' && '📊 Analyse Quantitative'}
                                 {activeTab !== 'quant' && (
                                     <span className="ml-2 px-2 py-0.5 rounded-full bg-white/10 text-sm font-normal text-gray-400">
@@ -784,6 +796,17 @@ export default function Dashboard() {
                                     `}
                                 >
                                     🔎 Pro Insights
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('contrarian')}
+                                    className={`
+                                        px-4 py-1.5 rounded-lg text-sm font-medium transition-all
+                                        ${activeTab === 'contrarian'
+                                            ? 'bg-rose-500/20 text-rose-400 shadow-sm'
+                                            : 'text-gray-400 hover:text-white hover:bg-white/5'}
+                                    `}
+                                >
+                                    🐻 Contrarian
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('quant')}
@@ -887,11 +910,16 @@ export default function Dashboard() {
                                 <Filter className="w-12 h-12 text-gray-600 mb-4" />
                                 <h3 className="text-lg font-medium text-gray-400 mb-2">Aucun signal trouvé</h3>
                                 <p className="text-sm text-gray-500">
-                                    {activeTab === 'equilibrage'
-                                        ? "Aucun marché ne se trouve actuellement dans la zone 45-55%."
-                                        : activeTab === 'hot'
-                                            ? "Aucun signal ne correspond aux critères de 'Mouvement'. Le marché est calme."
-                                            : "Ajustez les paramètres pour voir plus de résultats."}
+                                    {signals.length > 0 && filteredSignals.length === 0
+                                        ? <>
+                                            <span className="block text-amber-500 font-medium mb-1">{signals.length} signaux masqués par vos filtres.</span>
+                                            <span>Vérifiez : Score Min, Niveau "Watch" (Activé?), Volume...</span>
+                                        </>
+                                        : activeTab === 'equilibrage'
+                                            ? "Aucun marché ne se trouve actuellement dans la zone 45-55%."
+                                            : activeTab === 'hot'
+                                                ? "Aucun signal ne correspond à la stratégie active."
+                                                : "Ajustez les paramètres pour voir plus de résultats."}
                                 </p>
                             </div>
                         ) : (

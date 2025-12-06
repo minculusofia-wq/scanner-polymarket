@@ -169,13 +169,18 @@ class NewsAggregator:
                         sentiment, score = self._analyze_sentiment(f"{title} {description}")
                         
                         # Parse date
-                        pub_date = datetime.utcnow()
+                        pub_date = datetime.now(timezone.utc)
                         if article.get("publishedAt"):
                             try:
                                 dt = datetime.fromisoformat(article["publishedAt"].replace("Z", "+00:00"))
                                 # Convert to naive UTC
-                                pub_date = dt.replace(tzinfo=None)
-                            except:
+                                # Convert to aware UTC if naive, else astimezone
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                else:
+                                    dt = dt.astimezone(timezone.utc)
+                                pub_date = dt
+                            except Exception:
                                 pass
                         
                         news_items.append(NewsItem(
@@ -188,7 +193,7 @@ class NewsAggregator:
                             sentiment_score=score,
                             keywords=["newsapi"],
                             published_at=pub_date,
-                            fetched_at=datetime.utcnow()
+                            fetched_at=datetime.now(timezone.utc)
                         ))
                     except Exception as e:
                         continue
@@ -239,7 +244,7 @@ class NewsAggregator:
                         sentiment, score = self._analyze_sentiment(f"{title} {snippet}")
                         
                         # Parse date
-                        pub_date = datetime.utcnow()
+                        pub_date = datetime.now(timezone.utc)
                         if article.get("date"):
                             # SerpAPI returns relative dates like "2 hours ago"
                             date_str = article["date"]
@@ -255,7 +260,7 @@ class NewsAggregator:
                             sentiment_score=score,
                             keywords=["serpapi"],
                             published_at=pub_date,
-                            fetched_at=datetime.utcnow()
+                            fetched_at=datetime.now(timezone.utc)
                         ))
                     except Exception as e:
                         continue
@@ -271,7 +276,7 @@ class NewsAggregator:
     
     def _parse_relative_date(self, date_str: str) -> datetime:
         """Parse relative date strings like '2 hours ago'."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         date_str = date_str.lower()
         
         try:
@@ -287,7 +292,7 @@ class NewsAggregator:
             elif "week" in date_str:
                 weeks = int(''.join(filter(str.isdigit, date_str)) or '1')
                 return now - timedelta(weeks=weeks)
-        except:
+        except Exception:
             pass
         
         return now
@@ -316,7 +321,7 @@ class NewsAggregator:
                     title = unescape(title_match.group(1))
                     url = link_match.group(1)
                     
-                    pub_date = datetime.utcnow()
+                    pub_date = datetime.now(timezone.utc)
                     if pubdate_match:
                         try:
                             from email.utils import parsedate_to_datetime
@@ -324,8 +329,8 @@ class NewsAggregator:
                             # Convert to naive UTC
                             if dt.tzinfo:
                                 dt = dt.astimezone(timezone.utc)
-                            pub_date = dt.replace(tzinfo=None)
-                        except:
+                            pub_date = dt
+                        except Exception:
                             pass
                     
                     sentiment, score = self._analyze_sentiment(title)
@@ -340,7 +345,7 @@ class NewsAggregator:
                         sentiment_score=score,
                         keywords=[source_keyword],
                         published_at=pub_date,
-                        fetched_at=datetime.utcnow()
+                        fetched_at=datetime.now(timezone.utc)
                     ))
             except Exception as e:
                 continue
@@ -381,7 +386,7 @@ class NewsAggregator:
     def get_news_for_market(self, market_question: str, hours: int = 24) -> List[NewsItem]:
         """Get news relevant to a specific market."""
         keywords = market_question.lower().split()[:5]
-        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         relevant = []
         
         for source, items in self._news_cache.items():

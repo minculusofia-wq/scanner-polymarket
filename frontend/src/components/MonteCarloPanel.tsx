@@ -127,6 +127,17 @@ function EdgeCard({ opportunity }: { opportunity: EdgeOpportunity }) {
                 <span>Target: {formatPrice(opportunity.target_price)}</span>
                 <span>Current: {formatPrice(opportunity.current_price)}</span>
             </div>
+
+            {/* Action Button */}
+            <a
+                href={`https://polymarket.com/event/${opportunity.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 flex items-center justify-center gap-2 w-full py-2 rounded-lg font-medium text-sm transition-colors bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/5 hover:border-white/20"
+            >
+                <span>Voir sur Polymarket</span>
+                <ExternalLink className="w-3 h-3" />
+            </a>
         </div>
     );
 }

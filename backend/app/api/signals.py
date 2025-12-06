@@ -9,6 +9,7 @@ import httpx
 import json
 
 from app.core.cache import cache
+from app.services.strategies.fade import analyze_fade_opportunity
 
 router = APIRouter()
 
@@ -204,20 +205,21 @@ def calculate_score(market: dict) -> tuple[int, str]:
     if vol_24h < 1000:
         score -= 50
         
-    # Clamping (0-100)
-    score = max(0, min(100, int(score)))
+    # Clamping (0-100) -> Normalize to 0-10
+    raw_score = max(0, min(100, int(score)))
+    final_score = round(raw_score / 10)
     
-    # Level Determination
-    if score >= 80:
+    # Level Determination (Adjusted for 0-10 scale)
+    if final_score >= 8:
         level = "opportunity" # The cream of the crop
-    elif score >= 60:
+    elif final_score >= 6:
         level = "strong"
-    elif score >= 40:
+    elif final_score >= 4:
         level = "interesting"
     else:
         level = "watch"
     
-    return score, level
+    return final_score, level
 
 
 def parse_prices(market: dict):
@@ -227,7 +229,7 @@ def parse_prices(market: dict):
         yes_price = float(outcome_prices[0]) if len(outcome_prices) > 0 else 0
         no_price = float(outcome_prices[1]) if len(outcome_prices) > 1 else 0
         return yes_price, no_price
-    except:
+    except Exception:
         return 0.5, 0.5
 
 
@@ -427,6 +429,7 @@ async def get_hot_signals(
     - whale: Smart Money Tracking (Volume > 25k or High Activity). COPY TRADING.
     - yield: Safe Yield / Group Arb (Sum of Prices < 0.98). DELTA NEUTRAL.
     - scalp: Liquidity Pockets (Spread > 3cts). LIMIT ORDERS.
+    - fade: Contrarian / Hype Fading (High Price + High Sentiment). BET NO.
     """
     try:
         markets, error, is_cached, cache_age = await fetch_markets()
@@ -520,6 +523,15 @@ async def get_hot_signals(
                         opportunity_side = "SCALP"
                         display_msg = f"SCALP SPREAD: {spread * 100:.1f}c"
                         sort_score = spread
+
+                elif strategy == "fade":
+                    # Logic: Fade Strategy Service
+                    opp_side, msg, score = await analyze_fade_opportunity(market)
+                    
+                    if opp_side:
+                        opportunity_side = opp_side
+                        display_msg = msg
+                        sort_score = score
 
                 
                 if not opportunity_side:

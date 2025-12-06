@@ -265,7 +265,7 @@ class WhaleTracker:
         Used to demonstrate the tracking system.
         """
         trade = WhaleTrade(
-            id=f"sim_{datetime.utcnow().timestamp()}",
+            id=f"sim_{datetime.now(timezone.utc).timestamp()}",
             trader=f"0x{hash(market_question) % 0xFFFF:04x}...",
             market_id=slug,
             market_question=market_question,

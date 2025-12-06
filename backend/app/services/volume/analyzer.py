@@ -4,7 +4,7 @@ Volume Analysis Service.
 Analyzes trading volume to detect spikes and unusual activity.
 """
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from collections import defaultdict
 import statistics
@@ -102,7 +102,7 @@ class VolumeAnalyzer:
             return None
         
         # Update history
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         self._volume_history[market_id].append((now, current_volume))
         
         # Keep only last 7 days of history
@@ -183,13 +183,13 @@ class VolumeAnalyzer:
     ):
         """Create a volume alert."""
         alert = VolumeAlert(
-            id=f"{market_id}_{datetime.utcnow().timestamp()}",
+            id=f"{market_id}_{datetime.now(timezone.utc).timestamp()}",
             market_id=market_id,
             market_question=question,
             alert_type=alert_type,
             volume_change_pct=change_pct,
             direction=direction,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         self._alerts.append(alert)
         

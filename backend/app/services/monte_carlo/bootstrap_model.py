@@ -156,17 +156,16 @@ class BootstrapOptionModel:
         *,
         keep_paths: bool = False,
         seed: Optional[int] = None,
+        noise_multiplier: float = 1.0,
     ) -> SimulationResult:
         """
         Run Monte Carlo simulation.
         
         Args:
-            end_date: Target date (format: "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS")
-            keep_paths: Whether to store full price paths (memory intensive)
-            seed: Random seed for reproducibility
-            
-        Returns:
-            SimulationResult with terminal prices and statistics
+            end_date: Target date
+            keep_paths: Store full paths
+            seed: Random seed
+            noise_multiplier: Multiplier for added noise (e.g. 1.5 for high volatility events)
         """
         n_periods, T_years = self._compute_horizon(end_date)
         rng = np.random.default_rng(seed)
@@ -188,8 +187,10 @@ class BootstrapOptionModel:
         sampled_returns = logret[all_indices]
         
         # Add noise if specified
-        if self.noise_std > 0:
-            noise = rng.normal(0, self.noise_std, sampled_returns.shape)
+        if self.noise_std > 0 or noise_multiplier > 1.0:
+            # Base noise or minimum noise for multiplier effect
+            std = max(self.noise_std, 0.001) * noise_multiplier
+            noise = rng.normal(0, std, sampled_returns.shape)
             sampled_returns = sampled_returns + noise
         
         # Compute cumulative returns

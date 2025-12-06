@@ -174,6 +174,10 @@ async def get_supported_assets():
             {"code": "BTC", "name": "Bitcoin", "symbol": "BTCUSDT"},
             {"code": "ETH", "name": "Ethereum", "symbol": "ETHUSDT"},
             {"code": "SOL", "name": "Solana", "symbol": "SOLUSDT"},
+            {"code": "SPX", "name": "S&P 500", "symbol": "^GSPC"},
+            {"code": "NDX", "name": "NASDAQ 100", "symbol": "^IXIC"},
+            {"code": "GOLD", "name": "Gold", "symbol": "GC=F"},
+            {"code": "OIL", "name": "Crude Oil", "symbol": "CL=F"},
         ],
         "note": "Only Polymarket markets about these asset prices can be analyzed with Monte Carlo"
     }

@@ -27,15 +27,20 @@ Un bot de trading algorithmique avancé pour scanner, analyser et tracker les op
 - **Support Multi-Actifs** : Analyse BTC, ETH et SOL pour trouver des divergences de prix.
 - **Visualisation dédiée** : Nouvel onglet "Quant" pour voir les opportunités mathématiques.
 
-### 5. ⚡ Performance & Résilience
+### 5. 🐻 Stratégie Contrarian (Fade)
+- **Détection de Hype** : Identifie les marchés surchauffés (Prix > 60cts + Euphorie).
+- **Fade Scanner** : Nouvel onglet pour repérer les opportunités de parier "NON" contre la foule.
+- **Sentiment Crypto** : Intégration de l'index "Fear & Greed" pour le contexte.
+
+### 6. 🌍 Données Macro & Sentiment TradFi
+- **Alpha Vantage** : Sentiment des news pour S&P 500, Gold et Oil.
+- **Finnhub** : Calendrier économique pour ajuster la volatilité des simulations.
+- **Sentiment Analysis** : Corrélation entre les news et les mouvements de prix.
+
+### 7. ⚡ Performance & Résilience
 - **Architecture WebSocket** : Mises à jour en push instantané.
 - **Système de Cache** : Continue de fonctionner même si l'API Polymarket est en panne.
 - **Base de Données SQLite** : Historique complet des signaux.
-
-### 6. 📰 Analyse de News Multi-sources
-- **Agrégateur IA** : Combine Google News, NewsAPI et SerpAPI.
-- **Analyse de Sentiment** : Corrélation entre les news et les mouvements de prix.
-- **Détection de Catalyseurs** : Identifie les événements majeurs impactant les marchés.
 
 ## 🛠 Architecture Technique
 
@@ -75,6 +80,9 @@ Créez un fichier `.env` dans le dossier `backend` :
 ```env
 NEWSAPI_KEY=votre_cle_ici
 SERPAPI_KEY=votre_cle_ici
+# Optionnel (Pour fonctionnalités avancées)
+ALPHA_VANTAGE_KEY=votre_cle_ici
+FINNHUB_KEY=votre_cle_ici
 ```
 
 ### 3. Installation du Frontend

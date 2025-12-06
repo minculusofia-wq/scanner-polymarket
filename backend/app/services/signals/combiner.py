@@ -5,7 +5,7 @@ Combines signals from whale detection, volume analysis, and news to generate
 trading opportunity signals.
 """
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from enum import Enum
 
@@ -76,7 +76,7 @@ class SignalCombiner:
         for market in markets:
             try:
                 signal = await self._analyze_market(market)
-                if signal and signal.score >= 40:  # Minimum threshold for WATCH
+                if signal and signal.score >= 4:  # Minimum threshold for WATCH
                     signals.append(signal)
                     self._signals.append(signal)
             except Exception as e:
@@ -127,9 +127,10 @@ class SignalCombiner:
         )
         
         total_score = int(min(total_score, 100))
+        final_score = round(total_score / 10)
         
         # Determine level
-        level = self._get_level(total_score)
+        level = self._get_level(final_score)
         
         # Determine direction
         direction = self._determine_direction(
@@ -144,10 +145,10 @@ class SignalCombiner:
         )
         
         return Signal(
-            id=f"{market_id}_{datetime.utcnow().timestamp()}",
+            id=f"{market_id}_{datetime.now(timezone.utc).timestamp()}",
             market_id=market_id,
             market_question=question,
-            score=total_score,
+            score=final_score,
             level=level,
             direction=direction,
             whale_score=whale_score,
@@ -155,7 +156,7 @@ class SignalCombiner:
             news_score=news_score,
             price_movement=price_movement,
             reasons=reasons,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
     
     def _calculate_whale_score(self, trades: List) -> int:
@@ -205,11 +206,11 @@ class SignalCombiner:
     
     def _get_level(self, score: int) -> SignalLevel:
         """Determine signal level from score."""
-        if score >= 90:
+        if score >= 9:
             return SignalLevel.OPPORTUNITY
-        elif score >= 75:
+        elif score >= 7:
             return SignalLevel.STRONG
-        elif score >= 60:
+        elif score >= 6:
             return SignalLevel.INTERESTING
         else:
             return SignalLevel.WATCH
@@ -238,7 +239,7 @@ class SignalCombiner:
                 yes_votes += 10000
             else:
                 no_votes += 10000
-        except:
+        except Exception:
             pass
         
         # News direction
@@ -280,7 +281,7 @@ class SignalCombiner:
     
     def get_signals(
         self,
-        min_score: int = 40,
+        min_score: int = 4,
         level: Optional[SignalLevel] = None,
         limit: int = 20
     ) -> List[Signal]:
@@ -297,7 +298,7 @@ class SignalCombiner:
     
     def get_top_signals(self, limit: int = 5) -> List[Signal]:
         """Get top signals by score."""
-        return self.get_signals(min_score=70, limit=limit)
+        return self.get_signals(min_score=7, limit=limit)
 
 
 # Singleton instance
