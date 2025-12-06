@@ -588,3 +588,44 @@ async def clear_cache():
     """Clear all cache."""
     cache.clear()
     return {"message": "Cache cleared"}
+
+
+# --- ADVANCED STRATEGY ENDPOINTS ---
+
+from app.services.strategies.negative_risk import calculate_negative_risk
+
+@router.get("/arbitrage", response_model=dict)
+async def get_arbitrage_opportunities():
+    """
+    Get 'Negative Risk' Arbitrage Opportunities.
+    Returns events where Sum(YES) > 1.02.
+    """
+    try:
+        markets, error, is_cached, cache_age = await fetch_markets()
+        
+        if not markets:
+            return {"opportunities": [], "error": error}
+            
+        opportunities = calculate_negative_risk(markets)
+        
+        # Convert dataclass to dict
+        results = []
+        for opp in opportunities:
+            results.append({
+                "event_id": opp.event_id,
+                "event_slug": opp.event_slug,
+                "event_title": opp.event_title,
+                "market_count": opp.market_count,
+                "sum_yes_price": opp.sum_yes_price,
+                "profit_pct": opp.profit_pct,
+                "markets": opp.markets
+            })
+            
+        return {
+            "opportunities": results,
+            "count": len(results),
+            "cached": is_cached,
+            "error": None
+        }
+    except Exception as e:
+        return {"opportunities": [], "error": f"CRASH: {str(e)}"}

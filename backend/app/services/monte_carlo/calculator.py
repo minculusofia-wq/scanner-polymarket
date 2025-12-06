@@ -22,6 +22,14 @@ CACHE_KEY_OHLCV = "binance_ohlcv_{symbol}_{interval}"
 CACHE_TTL = 3600  # 1 hour
 
 
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
+
+# Helper function for serialization (must be top-level)
+def run_simulation_task(model, end_date, noise_multiplier):
+    return model.simulate(end_date, noise_multiplier=noise_multiplier)
+
+
 @dataclass
 class EdgeOpportunity:
     """Represents an edge opportunity on Polymarket."""
@@ -139,7 +147,6 @@ class MonteCarloCalculator:
         "OIL": "CL=F",
     }
     
-
     
     def __init__(self, n_sims: int = 50_000):
         """
@@ -150,7 +157,16 @@ class MonteCarloCalculator:
         """
         self.n_sims = n_sims
         self._models: Dict[str, BootstrapOptionModel] = {}
+        # Max workers = None usually defaults to cpu_count()
+        self.executor = ProcessPoolExecutor(max_workers=None)
     
+    def shutdown(self):
+        """Shutdown the process pool."""
+        self.executor.shutdown(wait=True)
+
+    def __del__(self):
+        self.shutdown()
+
     def _parse_market_question(self, question: str) -> Optional[Tuple[str, float, str]]:
         """
         Parse a market question to extract asset, target price, and direction.
@@ -239,8 +255,6 @@ class MonteCarloCalculator:
             else:
                 print(f"Fetching {symbol} from Yahoo...")
                 # Yahoo handles async internally or is fast enough for now
-                import asyncio
-                # Run sync yahoo fetch in thread executor to avoid blocking
                 loop = asyncio.get_event_loop()
                 df = await loop.run_in_executor(None, get_yahoo_ohlcv, symbol, "1h", "2y")
 
@@ -288,9 +302,16 @@ class MonteCarloCalculator:
         except Exception:
             pass
             
-        # Run simulation with macro adjustment
-        # Passing macro_mult as a noise multiplier (simplified for now)
-        result = model.simulate(end_date, noise_multiplier=macro_mult)
+        # Run simulation with macro adjustment using ProcessPoolExecutor
+        loop = asyncio.get_event_loop()
+        # Non-blocking simulation on separate process
+        result = await loop.run_in_executor(
+            self.executor, 
+            run_simulation_task, 
+            model, 
+            end_date, 
+            macro_mult
+        )
         
         # Calculate probability based on direction
         if direction == "below":
@@ -348,7 +369,7 @@ class MonteCarloCalculator:
             # Calculate MC probability based on direction
             mc_result = await self.calculate_probability(asset, target_price, end_date, direction)
         except Exception as e:
-            print(f"Error calculating MC for {question}: {e}")
+            # print(f"Error calculating MC for {question}: {e}")
             return None
         
         mc_prob = mc_result["probability"]

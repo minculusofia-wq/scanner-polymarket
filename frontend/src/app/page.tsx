@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-    Activity, TrendingUp, Fish, Newspaper, Zap, Wifi, WifiOff,
-    ExternalLink, SlidersHorizontal, X, RefreshCw, Filter, ChevronDown,
-    ArrowUpRight, ArrowDownRight, Eye, Clock, Loader2
-} from 'lucide-react';
+import { Zap, Activity, Info, TrendingUp, SlidersHorizontal, RefreshCw, Layers, ArrowUpRight, DollarSign, Filter, Loader2, Play, Users, Brain, Wifi, WifiOff, Fish, AlertTriangle, ExternalLink, ArrowDownRight, Clock, Eye, X } from 'lucide-react';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { StatCard } from '@/components/StatCard';
+import { SignalCard } from '@/components/SignalCard';
+import { ArbitrageCard } from '@/components/ArbitrageCard';
 import MonteCarloPanel from '@/components/MonteCarloPanel';
 
 // ============ Types ============
@@ -56,9 +55,20 @@ interface WhaleTrade {
     market_question: string;
     slug: string;
     side: 'YES' | 'NO';
-    size_usd: number;
+    amount: number;
     price: number;
     timestamp: string;
+    size_usd: number;
+}
+
+interface ArbitrageOpportunity {
+    event_id: string;
+    event_slug: string;
+    event_title: string;
+    market_count: number;
+    sum_yes_price: number;
+    profit_pct: number;
+    markets: any[];
 }
 
 // ============ Utility Functions ============
@@ -413,6 +423,7 @@ function StatCard({
 // ============ Main Dashboard ============
 export default function Dashboard() {
     const [signals, setSignals] = useState<Signal[]>([]);
+    const [arbitrageOpps, setArbitrageOpps] = useState<ArbitrageOpportunity[]>([]);
     const [isLive, setIsLive] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -421,28 +432,39 @@ export default function Dashboard() {
     const [whaleTrades, setWhaleTrades] = useState<WhaleTrade[]>([]);
 
     // Independent Settings States
-    const [scannerSettings, setScannerSettings] = useState<ScannerSettings>({
+    // Definition of defaults avoids repetition
+    const defaultSettings: ScannerSettings = {
         minWhaleCount: 0,
         minUniqueWhales: 0,
         minVolumeUsd: 0,
         minLiquidity: 0,
-        maxSpread: 0.10, // Permissive for Scanner
+        maxSpread: 0.10,
         maxTimeHours: 0,
         minNewsCount: 0,
         minScore: 0,
-        showWatchLevel: true // Show everything by default
-    });
+        showWatchLevel: true
+    };
 
-    const [proInsightSettings, setProInsightSettings] = useState<ScannerSettings>({
-        minWhaleCount: 0,
-        minUniqueWhales: 0,
-        minVolumeUsd: 1000,
-        minLiquidity: 1000,
-        maxSpread: 0.05, // Stricter for Pro (5 cents)
-        maxTimeHours: 0,
-        minNewsCount: 0,
-        minScore: 4, // Quality filter (now on 10)
-        showWatchLevel: true // Show all signals by default for Pro strategies
+    // State holding settings for ALL tabs
+    const [tabSettings, setTabSettings] = useState<Record<string, ScannerSettings>>({
+        scanner: { ...defaultSettings },
+        // Equilibrage: Loose defaults, but independent. User can tighten them.
+        equilibrage: { ...defaultSettings, maxSpread: 1.0 },
+        // Pro Insights: Stricter defaults
+        hot: {
+            ...defaultSettings,
+            minVolumeUsd: 1000,
+            minLiquidity: 1000,
+            maxSpread: 0.05,
+            minScore: 4
+        },
+        // Contrarian: Specific defaults
+        contrarian: {
+            ...defaultSettings,
+            minLiquidity: 1000,
+            minScore: 4
+        },
+        quant: { ...defaultSettings } // Unused but kept for type safety
     });
 
     const [activeTab, setActiveTab] = useState<'scanner' | 'equilibrage' | 'hot' | 'quant' | 'contrarian'>('scanner');
@@ -450,15 +472,15 @@ export default function Dashboard() {
     const [hotSettings, setHotSettings] = useState({ amount: '', profit: '', strategy: 'whale' });
 
     // Computed Settings based on Tab
-    const activeSettings = (activeTab === 'hot' || activeTab === 'contrarian') ? proInsightSettings : scannerSettings;
+    // Creates a fallback to default if something goes wrong, but primarily pulls from state
+    const activeSettings = tabSettings[activeTab] || defaultSettings;
 
     // Update Handler
     const handleSettingsUpdate = (newSettings: ScannerSettings) => {
-        if (activeTab === 'hot' || activeTab === 'contrarian') {
-            setProInsightSettings(newSettings);
-        } else {
-            setScannerSettings(newSettings);
-        }
+        setTabSettings(prev => ({
+            ...prev,
+            [activeTab]: newSettings
+        }));
     };
 
     // WebSocket connection for real-time updates
@@ -833,24 +855,42 @@ export default function Dashboard() {
                                             onClick={() => setHotSettings(prev => ({ ...prev, strategy: 'whale' }))}
                                             className={`px-4 py-3 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${hotSettings.strategy === 'whale' ? 'bg-indigo-600 text-white shadow-lg ring-1 ring-white/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
                                         >
-                                            🐋 Whale Copier <span className="text-[10px] font-normal opacity-70 ml-1">Volume &gt;25k</span>
+                                            🐋 Whale <span className="text-[10px] font-normal opacity-70 ml-1">Vol {'>'}25k</span>
                                         </button>
                                         <button
                                             onClick={() => setHotSettings(prev => ({ ...prev, strategy: 'yield' }))}
                                             className={`px-4 py-3 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${hotSettings.strategy === 'yield' ? 'bg-emerald-600 text-white shadow-lg ring-1 ring-white/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
                                         >
-                                            🛡️ Safe Yield <span className="text-[10px] font-normal opacity-70 ml-1">Hedge &lt;96%</span>
+                                            🛡️ Safe Yield <span className="text-[10px] font-normal opacity-70 ml-1">Hedge</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setHotSettings(prev => ({ ...prev, strategy: 'arbitrage' }))}
+                                            className={`px-4 py-3 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${hotSettings.strategy === 'arbitrage' ? 'bg-green-600 text-white shadow-lg ring-1 ring-white/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
+                                        >
+                                            🧩 Arbitrage <span className="text-[10px] font-normal opacity-70 ml-1">Risk-Free</span>
                                         </button>
                                         <button
                                             onClick={() => setHotSettings(prev => ({ ...prev, strategy: 'scalp' }))}
                                             className={`px-4 py-3 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${hotSettings.strategy === 'scalp' ? 'bg-orange-600 text-white shadow-lg ring-1 ring-white/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
                                         >
-                                            🦅 Scalp Pro <span className="text-[10px] font-normal opacity-70 ml-1">Spread &gt;3c</span>
+                                            🦅 Scalp <span className="text-[10px] font-normal opacity-70 ml-1">Spread</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setHotSettings(prev => ({ ...prev, strategy: 'fade' }))}
+                                            className={`px-4 py-3 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${hotSettings.strategy === 'fade' ? 'bg-rose-600 text-white shadow-lg ring-1 ring-white/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
+                                        >
+                                            🐻 Fade <span className="text-[10px] font-normal opacity-70 ml-1">Contrarian</span>
                                         </button>
                                     </div>
 
                                     {/* 2. Dynamic Info Panel */}
                                     <div className="flex items-center gap-4 bg-black/20 p-3 rounded-lg border border-white/5 min-h-[50px]">
+                                        {hotSettings.strategy === 'arbitrage' && (
+                                            <div className="flex items-center gap-2 text-green-400 animate-in fade-in">
+                                                <span className="font-bold">STRATÉGIE:</span>
+                                                <span>Opportunités où la somme des cotes dépasse 100%. Achetez tous les "NON" pour un profit mathématique garanti.</span>
+                                            </div>
+                                        )}
                                         {hotSettings.strategy === 'whale' && (
                                             <div className="flex flex-col gap-3 w-full animate-in fade-in">
                                                 <div className="flex items-center gap-2 text-indigo-400">
@@ -865,8 +905,8 @@ export default function Dashboard() {
                                                         <input
                                                             type="number"
                                                             min="0"
-                                                            value={proInsightSettings.minWhaleCount}
-                                                            onChange={(e) => setProInsightSettings(prev => ({ ...prev, minWhaleCount: Number(e.target.value) }))}
+                                                            value={activeSettings.minWhaleCount}
+                                                            onChange={(e) => handleSettingsUpdate({ ...activeSettings, minWhaleCount: Number(e.target.value) })}
                                                             className="w-16 bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-indigo-500"
                                                         />
                                                     </div>
@@ -875,8 +915,8 @@ export default function Dashboard() {
                                                         <input
                                                             type="number"
                                                             min="0"
-                                                            value={proInsightSettings.minUniqueWhales}
-                                                            onChange={(e) => setProInsightSettings(prev => ({ ...prev, minUniqueWhales: Number(e.target.value) }))}
+                                                            value={activeSettings.minUniqueWhales}
+                                                            onChange={(e) => handleSettingsUpdate({ ...activeSettings, minUniqueWhales: Number(e.target.value) })}
                                                             className="w-16 bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-indigo-500"
                                                         />
                                                     </div>
@@ -900,8 +940,23 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {/* Quant Analysis Panel */}
-                        {activeTab === 'quant' ? (
+
+                        {/* Arbitrage Grid (Special Case) */}
+                        {activeTab === 'hot' && hotSettings.strategy === 'arbitrage' ? (
+                            arbitrageOpps.length === 0 && !isLoading ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-center">
+                                    <Layers className="w-12 h-12 text-gray-600 mb-4" />
+                                    <h3 className="text-lg font-medium text-gray-400 mb-2">Pas d'arbitrage "Negative Risk" détecté</h3>
+                                    <p className="text-sm text-gray-500">Les marchés 100% efficients... pour l'instant.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    {arbitrageOpps.map((opp) => (
+                                        <ArbitrageCard key={opp.event_id} opportunity={opp} />
+                                    ))}
+                                </div>
+                            )
+                        ) : activeTab === 'quant' ? (
                             <div className="bg-[#151921] border border-fuchsia-500/20 rounded-xl p-6 animate-in fade-in slide-in-from-top-2">
                                 <MonteCarloPanel />
                             </div>
