@@ -72,9 +72,6 @@ async def get_edge_opportunities(
     
     Returns markets where Monte Carlo probability differs significantly
     from Polymarket price.
-    
-    - **min_edge**: Minimum edge to report (default: 5%)
-    - **limit**: Maximum number of opportunities
     """
     try:
         # Fetch all markets
@@ -90,28 +87,39 @@ async def get_edge_opportunities(
         opportunities = []
         crypto_count = 0
         
-        for market in markets:
+        # Concurrency control
+        import asyncio
+        semaphore = asyncio.Semaphore(10)  # Max 10 concurrent tasks
+        
+        async def process_market(market):
+            nonlocal crypto_count
             if market.get("closed"):
-                continue
+                return None
             
-            # Convert to signal format for consistency
+            # Convert to signal dict
             try:
                 signal = market_to_signal(market)
                 market_dict = signal.dict()
             except Exception:
-                continue
+                return None
             
-            # Calculate edge
-            edge_opp = await mc_calculator.calculate_edge(market_dict)
+            async with semaphore:
+                # Calculate edge (this includes heavy simulation + API calls)
+                edge_opp = await mc_calculator.calculate_edge(market_dict)
             
-            if edge_opp is None:
-                continue  # Not a crypto price market
-            
-            crypto_count += 1
-            
-            # Filter by minimum edge
-            if abs(edge_opp.edge) >= min_edge:
-                opportunities.append(edge_opp.to_dict())
+            if edge_opp:
+                return edge_opp
+            return None
+
+        # Gather results
+        tasks = [process_market(m) for m in markets]
+        results = await asyncio.gather(*tasks)
+        
+        for res in results:
+            if res:
+                crypto_count += 1
+                if abs(res.edge) >= min_edge:
+                    opportunities.append(res.to_dict())
         
         # Sort by absolute edge (highest first)
         opportunities.sort(key=lambda x: abs(x["edge"]), reverse=True)
@@ -122,6 +130,7 @@ async def get_edge_opportunities(
             crypto_markets_analyzed=crypto_count,
         )
     except Exception as e:
+        print(f"Error scanning markets: {e}")
         raise HTTPException(status_code=500, detail=f"Error scanning markets: {str(e)}")
 
 
