@@ -16,17 +16,23 @@ Un bot de trading algorithmique avancé pour scanner, analyser et tracker les op
 - **Détection "Coin Flip"** : Isole spécifiquement les opportunités où les probabilités sont entre 45% et 55%.
 - **Vue Simplifiée** : Interface dédiée sans scoring complexe, focalisée uniquement sur le prix et le volume.
 
-### 3. 🐋 Whale Tracking (Nouveau)
+### 3. 🐋 Whale Tracking (Amélioré)
 - **Détection des Gros Trades** : Identifie les transactions supérieures à $10,000.
-- **Profilage des Whales** : Analyse le comportement des gros investisseurs (Win-rate, Volume total).
-- **Sentiment du Marché** : Détermine si les "smart money" sont Bullish ou Bearish sur un événement.
+- **Profilage des Whales** : Analyse le comportement des gros investisseurs.
+- **NOUVEAU : Filtrage Avancé** : Configurez le nombre minimum de trades et de whales uniques pour filtrer le bruit.
 
-### 4. ⚡ Performance & Résilience
-- **Architecture WebSocket** : Mises à jour en push instantané (plus de rafraîchissement manuel).
-- **Système de Cache** : Continue de fonctionner même si l'API Polymarket est en panne (Fallback automatique).
-- **Base de Données SQLite** : Historique complet des signaux et des prix pour analyse de tendance.
+### 4. 📊 Quant Analysis (Monte Carlo)
+- **Simulations Bootstrap** : 10,000 simulations de prix basées sur l'historique (Binance).
+- **Détection d'Edge** : Compare les probabilités réelles aux prix Polymarket.
+- **Support Multi-Actifs** : Analyse BTC, ETH et SOL pour trouver des divergences de prix.
+- **Visualisation dédiée** : Nouvel onglet "Quant" pour voir les opportunités mathématiques.
 
-### 5. 📰 Analyse de News Multi-sources
+### 5. ⚡ Performance & Résilience
+- **Architecture WebSocket** : Mises à jour en push instantané.
+- **Système de Cache** : Continue de fonctionner même si l'API Polymarket est en panne.
+- **Base de Données SQLite** : Historique complet des signaux.
+
+### 6. 📰 Analyse de News Multi-sources
 - **Agrégateur IA** : Combine Google News, NewsAPI et SerpAPI.
 - **Analyse de Sentiment** : Corrélation entre les news et les mouvements de prix.
 - **Détection de Catalyseurs** : Identifie les événements majeurs impactant les marchés.
