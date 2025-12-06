@@ -4,7 +4,7 @@ Signals API endpoints - Real Polymarket data with caching.
 from fastapi import APIRouter, Query
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 import httpx
 import json
 
@@ -37,6 +37,8 @@ class Signal(BaseModel):
     no_price: float
     price_movement: float
     liquidity: float
+    spread: float
+    hours_remaining: float
     end_date: str
     polymarket_url: str
     created_at: datetime
@@ -130,54 +132,79 @@ async def fetch_markets():
 
 
 def calculate_score(market: dict) -> tuple[int, str]:
-    """Calculate signal score (0-100) and level."""
+    """
+    Smart Scoring 2.0:
+    - Focus on Turnover (Activity relative to Size)
+    - Penalize Wide Spreads (Untradeable)
+    - Reward Volatility (Price Movement)
+    """
     score = 0
     
-    # Volume 24h (0-30 points)
-    vol_24h = market.get("volume24hr", 0) or 0
-    if vol_24h > 100000:
-        score += 30
-    elif vol_24h > 50000:
-        score += 25
-    elif vol_24h > 10000:
-        score += 20
-    elif vol_24h > 1000:
-        score += 10
-    
-    # Liquidity (0-25 points)
-    liquidity = market.get("liquidityNum", 0) or 0
+    # 1. Base Liquidity (Max 20 pts) - Is it tradeable size?
+    liquidity = float(market.get("liquidityNum") or 0)
     if liquidity > 500000:
-        score += 25
-    elif liquidity > 100000:
         score += 20
-    elif liquidity > 50000:
+    elif liquidity > 100000:
         score += 15
     elif liquidity > 10000:
         score += 10
+        
+    # 2. Activity / Turnover (Max 40 pts) - Is it HEATING UP?
+    vol_24h = float(market.get("volume24hr") or market.get("volume") or 0)
     
-    # Price movement (0-25 points)
-    price_change = abs(market.get("oneDayPriceChange", 0) or 0)
-    if price_change > 20:
-        score += 25
-    elif price_change > 10:
-        score += 20
-    elif price_change > 5:
-        score += 15
-    elif price_change > 2:
+    # Whale Bonus (Absolute Volume)
+    if vol_24h > 100000:
         score += 10
     
-    # Weekly activity (0-20 points)
-    vol_1wk = market.get("volume1wk", 0) or 0
-    if vol_1wk > 500000:
+    # Turnover Ratio (Relative Volume)
+    # If a 10k pool trades 5k (0.5 ratio), it's hotter than a 1M pool trading 10k (0.01 ratio).
+    if liquidity > 0:
+        turnover = vol_24h / liquidity
+        if turnover > 0.5:
+            score += 30
+        elif turnover > 0.2:
+            score += 20
+        elif turnover > 0.1:
+            score += 10
+            
+    # 3. Volatility / Opportunity (Max 30 pts)
+    price_change = abs(float(market.get("oneDayPriceChange") or 0))
+    if price_change > 10.0:
         score += 20
-    elif vol_1wk > 100000:
+    elif price_change > 5.0:
         score += 15
-    elif vol_1wk > 50000:
+    elif price_change > 2.0:
         score += 10
+        
+    # 4. Spread Analysis (Bonus or Penalty)
+    try:
+        best_bid = float(market.get("bestBid") or 0)
+        best_ask = float(market.get("bestAsk") or 0)
+        
+        if best_bid > 0 and best_ask > 0:
+            spread = best_ask - best_bid
+            
+            # Tight Spread Bonus (Easy to scalp/enter)
+            if spread <= 0.01:
+                score += 10
+            # Wide Spread Penalty (Trap)
+            elif spread > 0.05:
+                score -= 30
+            elif spread > 0.03:
+                score -= 15
+    except:
+        pass # Ignore spread if data missing
+        
+    # 5. Dead Market Penalty
+    if vol_24h < 1000:
+        score -= 50
+        
+    # Clamping (0-100)
+    score = max(0, min(100, int(score)))
     
-    # Level
-    if score >= 75:
-        level = "opportunity"
+    # Level Determination
+    if score >= 80:
+        level = "opportunity" # The cream of the crop
     elif score >= 60:
         level = "strong"
     elif score >= 40:
@@ -210,10 +237,13 @@ def market_to_signal(market: dict) -> Signal:
     price_change = market.get("oneDayPriceChange", 0) or 0
     direction = "YES" if price_change > 0 or yes_price > 0.5 else "NO"
     
-    # Get slug
-    slug = market.get("slug", "")
-    if not slug and market.get("events"):
+    # Get slug - Prioritize EVENT slug because market slug often 404s on /event/ URL
+    slug = ""
+    if market.get("events") and len(market["events"]) > 0:
         slug = market["events"][0].get("slug", "")
+    
+    if not slug:
+        slug = market.get("slug", "")
     
     # Generate URL
     if slug:
@@ -224,6 +254,30 @@ def market_to_signal(market: dict) -> Signal:
     vol_24h = market.get("volume24hr", 0) or 0
     liquidity = market.get("liquidityNum", 0) or 0
     
+    # Calculate Spread
+    spread = 0.0
+    try:
+        best_bid = float(market.get("bestBid") or 0)
+        best_ask = float(market.get("bestAsk") or 0)
+        if best_bid > 0 and best_ask > 0:
+            spread = best_ask - best_bid
+    except:
+        pass
+
+    # Calculate Time Remaining
+    hours_remaining = 0.0
+    try:
+        end_date_str = market.get("endDateIso")
+        if end_date_str:
+            clean_date_str = end_date_str.replace("Z", "+00:00")
+            end_date = datetime.fromisoformat(clean_date_str)
+            if end_date.tzinfo is None:
+                end_date = end_date.replace(tzinfo=timezone.utc)
+            delta = end_date - datetime.now(timezone.utc)
+            hours_remaining = max(0.0, delta.total_seconds() / 3600.0)
+    except:
+        pass
+
     return Signal(
         id=str(market.get("id", "")),
         market_id=str(market.get("id", "")),
@@ -243,9 +297,11 @@ def market_to_signal(market: dict) -> Signal:
         no_price=no_price,
         price_movement=price_change,
         liquidity=liquidity,
+        spread=spread,
+        hours_remaining=hours_remaining,
         end_date=market.get("endDateIso", ""),
         polymarket_url=polymarket_url,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
 
 
@@ -262,43 +318,46 @@ async def get_signals(
     
     When API is down, returns cached data with age indicator.
     """
-    markets, error, is_cached, cache_age = await fetch_markets()
-    
-    if not markets and error:
-        return SignalResponse(signals=[], total=0, cached=False, error=error)
-    
-    signals = []
-    for market in markets:
-        try:
-            if market.get("closed") or not market.get("question"):
+    try:
+        markets, error, is_cached, cache_age = await fetch_markets()
+        
+        if not markets and error:
+            return SignalResponse(signals=[], total=0, cached=False, error=error)
+        
+        signals = []
+        for market in markets:
+            try:
+                if market.get("closed") or not market.get("question"):
+                    continue
+                
+                signal = market_to_signal(market)
+                
+                # Apply filters
+                if signal.score < min_score:
+                    continue
+                if signal.volume_24h < min_volume:
+                    continue
+                if signal.liquidity < min_liquidity:
+                    continue
+                if level and signal.level != level:
+                    continue
+                
+                signals.append(signal)
+            except Exception:
                 continue
-            
-            signal = market_to_signal(market)
-            
-            # Apply filters
-            if signal.score < min_score:
-                continue
-            if signal.volume_24h < min_volume:
-                continue
-            if signal.liquidity < min_liquidity:
-                continue
-            if level and signal.level != level:
-                continue
-            
-            signals.append(signal)
-        except Exception:
-            continue
-    
-    # Sort by score
-    signals.sort(key=lambda x: x.score, reverse=True)
-    
-    return SignalResponse(
-        signals=signals[:limit],
-        total=len(signals),
-        cached=is_cached,
-        cache_age=cache_age,
-        error=error
-    )
+        
+        # Sort by score
+        signals.sort(key=lambda x: x.score, reverse=True)
+        
+        return SignalResponse(
+            signals=signals[:limit],
+            total=len(signals),
+            cached=is_cached,
+            cache_age=cache_age,
+            error=error
+        )
+    except Exception as e:
+        return SignalResponse(signals=[], total=0, cached=False, error=f"CRASH: {str(e)}")
 
 
 @router.get("/equilibrage", response_model=SignalResponse)
@@ -310,40 +369,192 @@ async def get_equilibrage_signals(
     - YES price between 0.45 and 0.55
     - Sorted by volume
     """
-    markets, error, is_cached, cache_age = await fetch_markets()
-    
-    if not markets and error:
-        return SignalResponse(signals=[], total=0, cached=False, error=error)
-    
-    signals = []
-    for market in markets:
-        try:
-            if market.get("closed") or not market.get("question"):
-                continue
-            
-            # Get basic signal to check prices
-            signal = market_to_signal(market)
-            
-            # Filter for Equilibrage: 45% <= price <= 55%
-            # We strictly check both yes_price and no_price to be safe, 
-            # though usually if yes is 0.45, no is 0.55.
-            if not (0.45 <= signal.yes_price <= 0.55):
-                continue
+    try:
+        markets, error, is_cached, cache_age = await fetch_markets()
+        
+        if not markets and error:
+            return SignalResponse(signals=[], total=0, cached=False, error=error)
+        
+        signals = []
+        for market in markets:
+            try:
+                if market.get("closed") or not market.get("question"):
+                    continue
                 
-            signals.append(signal)
-        except Exception:
-            continue
-    
-    # Sort by volume (liquidity/action is more important here than score)
-    signals.sort(key=lambda x: x.volume_24h, reverse=True)
-    
-    return SignalResponse(
-        signals=signals[:limit],
-        total=len(signals),
-        cached=is_cached,
-        cache_age=cache_age,
-        error=error
-    )
+                # Get basic signal to check prices
+                signal = market_to_signal(market)
+                
+                # Filter for Equilibrage: 45% <= price <= 55%
+                if not (0.45 <= signal.yes_price <= 0.55):
+                    continue
+                    
+                signals.append(signal)
+            except Exception:
+                continue
+        
+        # Sort by volume (liquidity/action is more important here than score)
+        signals.sort(key=lambda x: x.volume_24h, reverse=True)
+        
+        return SignalResponse(
+            signals=signals[:limit],
+            total=len(signals),
+            cached=is_cached,
+            cache_age=cache_age,
+            error=error
+        )
+    except Exception as e:
+        return SignalResponse(signals=[], total=0, cached=False, error=f"CRASH: {str(e)}")
+
+
+@router.get("/hot", response_model=SignalResponse)
+async def get_hot_signals(
+    amount: float = Query(default=0, ge=0),
+    target_profit: float = Query(default=0, ge=0),
+    strategy: str = Query(default="whale"), # whale, yield, scalp
+    limit: int = Query(default=100, le=500)
+):
+    """
+    Get 'Pro Insights' Calls based on Insider Strategies.
+    Strategies:
+    - whale: Smart Money Tracking (Volume > 25k or High Activity). COPY TRADING.
+    - yield: Safe Yield / Group Arb (Sum of Prices < 0.98). DELTA NEUTRAL.
+    - scalp: Liquidity Pockets (Spread > 3cts). LIMIT ORDERS.
+    """
+    try:
+        markets, error, is_cached, cache_age = await fetch_markets()
+        
+        if not markets and error:
+            return SignalResponse(signals=[], total=0, cached=False, error=error)
+            
+        signals = []
+        
+        # Pre-calc time
+        now = datetime.now(timezone.utc)
+        
+        for market in markets:
+            try:
+                # Basic validation
+                if market.get("closed") or not market.get("question"):
+                    continue
+
+                # Parse prices
+                outcome_prices = json.loads(market.get("outcomePrices", "[]"))
+                if len(outcome_prices) < 2:
+                    continue
+                    
+                yes_price = float(outcome_prices[0])
+                no_price = float(outcome_prices[1])
+                liquidity = float(market.get("liquidityNum") or 0)
+                volume = float(market.get("volume24hr") or market.get("volume") or 0)
+                
+                opportunity_side = None
+                display_msg = ""
+                sort_score = 0
+                
+                # --- STRATEGY LOGIC ---
+
+                if strategy == "whale":
+                    # Logic: Identify "Heavy Actions".
+                    # Filter 1: High Volume (>25k).
+                    # Filter 2: Volume/Liquidity Ratio indicates action?
+                    # Simple: If Volume > 25,000, it's a Whale Call.
+                    
+                    if volume > 25000:
+                        # Which side? The side with price momentum or just the market.
+                        # We return the market as a "Whale Call".
+                        # Heuristic: If YES > 0.60, Whale is Buying YES. If YES < 0.40, Whale is Buying NO.
+                        # Default to trending side.
+                        if yes_price > 0.55:
+                            opportunity_side = "YES"
+                            display_msg = f"WHALE BUY: YES ({yes_price:.2f})"
+                        elif no_price > 0.55:
+                            opportunity_side = "NO"
+                            display_msg = f"WHALE BUY: NO ({no_price:.2f})"
+                        else:
+                            opportunity_side = "WATCH" # Accumulation
+                            display_msg = "WHALE ACCUMULATION"
+                        
+                        sort_score = volume
+
+                elif strategy == "yield":
+                    # Logic: Sum of prices < 0.98 (Arb/Yield).
+                    # Often found in multi-outcome markets, but this endpoint fetches all.
+                    # We check the sum of ALL outcomes if available, but here we have YES/NO mostly or simple arrays.
+                    # Standard Polymarket is Binary (2 outcomes). Sum should be 1.0.
+                    # Yield exists if sum < 1.0 due to spread/inefficiency.
+                    
+                    price_sum = sum([float(p) for p in outcome_prices])
+                    
+                    # Filter: Liquidity must be decent (>1000) to be executable.
+                    if liquidity < 1000: continue
+
+                    if price_sum < 0.98: # 2% Edge minimum
+                        opportunity_side = "HEDGE"
+                        yield_pct = (1.0 - price_sum) * 100
+                        display_msg = f"SAFE YIELD: +{yield_pct:.1f}%"
+                        sort_score = yield_pct
+
+                elif strategy == "scalp":
+                    # Logic: Spread > 3 cents.
+                    # Need BestBid and BestAsk.
+                    best_bid = float(market.get("bestBid") or 0)
+                    best_ask = float(market.get("bestAsk") or 0)
+                    
+                    # If data missing, skip
+                    if best_bid == 0 or best_ask == 0: continue
+                    
+                    spread = best_ask - best_bid
+                    
+                    # Filter: Spread > 0.03 AND Liquidity > 5000 (To ensure we can get filled eventualy)
+                    if liquidity < 5000: continue
+                    
+                    if spread >= 0.03:
+                        opportunity_side = "SCALP"
+                        display_msg = f"SCALP SPREAD: {spread:.2f}c"
+                        sort_score = spread
+
+                
+                if not opportunity_side:
+                    continue
+                
+                # Construct Signal
+                signal = market_to_signal(market)
+                if not signal: 
+                    continue
+
+                # Override/Enrich for Display
+                # We hijack 'direction' or 'level' to enable frontend to display the Call.
+                signal.level = "opportunity"
+                if display_msg:
+                    # We can store the msg in 'direction' if we want, or rely on frontend?
+                    # Better: Frontend generates text. But backend logic is cleaner here.
+                    # There is no 'message' field. We'll reuse 'direction' for the specific "Call".
+                    signal.direction = display_msg
+                
+                signals.append({
+                    "data": signal,
+                    "sort": sort_score
+                })
+                
+            except Exception:
+                continue
+
+        # Sort
+        signals.sort(key=lambda x: x["sort"], reverse=True)
+        
+        # Unwrap
+        final_signals = [s["data"] for s in signals]
+        
+        return SignalResponse(
+            signals=final_signals[:limit],
+            total=len(final_signals),
+            cached=is_cached,
+            cache_age=cache_age,
+            error=error
+        )
+    except Exception as e:
+        # RETURN ERROR AS STRING instead of 500ing
+        return SignalResponse(signals=[], total=0, cached=False, error=f"CRASH: {str(e)}")
 
 
 @router.get("/cache/stats")

@@ -28,6 +28,8 @@ interface Signal {
     no_price: number;
     price_movement: number;
     liquidity: number;
+    spread: number;
+    hours_remaining: number;
     end_date: string;
     polymarket_url: string;
     created_at: string;
@@ -36,6 +38,9 @@ interface Signal {
 interface ScannerSettings {
     minWhaleCount: number;
     minVolumeUsd: number;
+    minLiquidity: number;
+    maxSpread: number; // Max spread allowed in cents
+    maxTimeHours: number; // 0 = All time
     minNewsCount: number;
     minScore: number;
     showWatchLevel: boolean;
@@ -89,7 +94,7 @@ function SettingsPanel({
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl w-full max-w-lg border border-white/10 shadow-2xl">
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl w-full max-w-lg border border-white/10 shadow-2xl overflow-y-auto max-h-[90vh]">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-white/10">
                     <div className="flex items-center gap-3">
@@ -97,8 +102,8 @@ function SettingsPanel({
                             <SlidersHorizontal className="w-5 h-5 text-sky-400" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-white">Paramètres du Scanner</h2>
-                            <p className="text-sm text-gray-400">Ajustez les seuils de détection</p>
+                            <h2 className="text-xl font-bold text-white">Paramètres Avancés</h2>
+                            <p className="text-sm text-gray-400">Qualité & Horizon</p>
                         </div>
                     </div>
                     <button
@@ -110,118 +115,123 @@ function SettingsPanel({
                 </div>
 
                 {/* Settings */}
-                <div className="p-6 space-y-6">
-                    {/* Whale Settings */}
-                    <div className="space-y-4">
-                        <h3 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">
-                            🐋 Détection Whales
-                        </h3>
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-300">Nombre min. de whales</span>
-                                <span className="text-white font-mono">{localSettings.minWhaleCount}</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="0"
-                                max="20"
-                                step="1"
-                                value={localSettings.minWhaleCount}
-                                onChange={(e) => setLocalSettings({ ...localSettings, minWhaleCount: Number(e.target.value) })}
-                                className="w-full accent-sky-500"
-                            />
-                        </div>
-                    </div>
+                <div className="p-6 space-y-8">
 
-                    {/* Volume Settings */}
+                    {/* 1. QUALITY FILTERS (Spread) */}
                     <div className="space-y-4">
-                        <h3 className="text-sm font-semibold text-green-400 uppercase tracking-wider">
-                            📈 Volume
+                        <h3 className="text-sm font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-2">
+                            🛡️ Qualité (Spread Max)
                         </h3>
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-300">Volume minimum (24h)</span>
-                                <span className="text-white font-mono">{formatCurrency(localSettings.minVolumeUsd)}</span>
+                        <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                            <div className="flex justify-between text-sm mb-2">
+                                <span className="text-gray-300">Spread Maximum autorisé</span>
+                                <span className="text-white font-mono font-bold">
+                                    {localSettings.maxSpread >= 0.10 ? "Illimité" : `${(localSettings.maxSpread * 100).toFixed(1)} cts`}
+                                </span>
                             </div>
                             <input
                                 type="range"
-                                min="0"
-                                max="1000000"
-                                step="10000"
-                                value={localSettings.minVolumeUsd}
-                                onChange={(e) => setLocalSettings({ ...localSettings, minVolumeUsd: Number(e.target.value) })}
-                                className="w-full accent-green-500"
-                            />
-                        </div>
-                    </div>
-
-                    {/* News Settings */}
-                    <div className="space-y-4">
-                        <h3 className="text-sm font-semibold text-yellow-400 uppercase tracking-wider">
-                            📰 Informations
-                        </h3>
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-300">Nombre min. de news</span>
-                                <span className="text-white font-mono">{localSettings.minNewsCount}</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="0"
-                                max="20"
-                                step="1"
-                                value={localSettings.minNewsCount}
-                                onChange={(e) => setLocalSettings({ ...localSettings, minNewsCount: Number(e.target.value) })}
-                                className="w-full accent-yellow-500"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Score Settings */}
-                    <div className="space-y-4">
-                        <h3 className="text-sm font-semibold text-purple-400 uppercase tracking-wider">
-                            🎯 Score Global
-                        </h3>
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-300">Score minimum</span>
-                                <span className="text-white font-mono">{localSettings.minScore}/10</span>
-                            </div>
-                            <input
-                                type="range"
-                                min="0"
+                                min="1"
                                 max="10"
-                                step="1"
-                                value={localSettings.minScore}
-                                onChange={(e) => setLocalSettings({ ...localSettings, minScore: Number(e.target.value) })}
-                                className="w-full accent-purple-500"
+                                step="0.5"
+                                value={localSettings.maxSpread * 100}
+                                onChange={(e) => setLocalSettings({ ...localSettings, maxSpread: Number(e.target.value) / 100 })}
+                                className="w-full accent-rose-500"
                             />
+                            <p className="text-xs text-gray-500 mt-2">
+                                Exclut les marchés avec un écart Achat/Vente trop grand (pièges).
+                            </p>
                         </div>
-                        <label className="flex items-center gap-3 cursor-pointer">
+                    </div>
+
+                    {/* 2. TIME HORIZON */}
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-semibold text-sky-400 uppercase tracking-wider flex items-center gap-2">
+                            ⏳ Horizon de Temps
+                        </h3>
+                        <div className="grid grid-cols-4 gap-2">
+                            {[
+                                { label: 'Tout', val: 0 },
+                                { label: '24h', val: 24 },
+                                { label: '3j', val: 72 },
+                                { label: '1s', val: 168 },
+                            ].map((opt) => (
+                                <button
+                                    key={opt.label}
+                                    onClick={() => setLocalSettings(prev => ({ ...prev, maxTimeHours: opt.val }))}
+                                    className={`py-2 rounded-lg text-sm font-medium border transition-all ${localSettings.maxTimeHours === opt.val
+                                        ? 'bg-sky-500/20 border-sky-500 text-sky-400'
+                                        : 'bg-white/5 border-white/5 text-gray-400 hover:bg-white/10'
+                                        }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="border-t border-white/10 my-4"></div>
+
+                    {/* Standard Filters (Condensed) */}
+                    <div className="grid grid-cols-2 gap-4">
+                        {/* Liquidity */}
+                        <div className="space-y-2">
+                            <label className="text-xs text-gray-400">Liquidité Min.</label>
+                            <select
+                                value={localSettings.minLiquidity}
+                                onChange={(e) => setLocalSettings({ ...localSettings, minLiquidity: Number(e.target.value) })}
+                                className="w-full bg-slate-900 border border-white/10 rounded-lg p-2 text-sm text-white"
+                            >
+                                <option value={0}>0$</option>
+                                <option value={1000}>1k$</option>
+                                <option value={10000}>10k$</option>
+                                <option value={50000}>50k$</option>
+                                <option value={100000}>100k$</option>
+                            </select>
+                        </div>
+
+                        {/* Score */}
+                        <div className="space-y-2">
+                            <label className="text-xs text-gray-400">Score Min.</label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    value={localSettings.minScore}
+                                    onChange={(e) => setLocalSettings({ ...localSettings, minScore: Number(e.target.value) })}
+                                    className="w-full bg-slate-900 border border-white/10 rounded-lg p-2 text-sm text-white"
+                                />
+                                <span className="text-xs text-gray-500">/100</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Toggles */}
+                    <div className="pt-2">
+                        <label className="flex items-center justify-between cursor-pointer group">
+                            <span className="text-gray-300 group-hover:text-white transition-colors">Afficher 'Surveillance' (Watch)</span>
                             <input
                                 type="checkbox"
                                 checked={localSettings.showWatchLevel}
                                 onChange={(e) => setLocalSettings({ ...localSettings, showWatchLevel: e.target.checked })}
-                                className="w-4 h-4 rounded accent-sky-500"
+                                className="w-5 h-5 rounded border-gray-600 bg-slate-800 text-sky-500 focus:ring-sky-500 focus:ring-offset-slate-900"
                             />
-                            <span className="text-sm text-gray-300">Afficher niveau &quot;Watch&quot;</span>
                         </label>
                     </div>
                 </div>
 
                 {/* Footer */}
-                <div className="flex gap-3 p-6 border-t border-white/10">
+                <div className="p-6 border-t border-white/10 flex justify-end gap-3 sticky bottom-0 bg-slate-800/95 backdrop-blur">
                     <button
                         onClick={onClose}
-                        className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 font-medium transition-colors"
+                        className="px-4 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
                     >
                         Annuler
                     </button>
                     <button
                         onClick={handleSave}
-                        className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-white font-medium transition-all shadow-lg shadow-sky-500/25"
+                        className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-medium shadow-lg shadow-emerald-500/20 transition-all"
                     >
-                        Appliquer
+                        Sauvegarder
                     </button>
                 </div>
             </div>
@@ -401,14 +411,45 @@ export default function Dashboard() {
     const [showSettings, setShowSettings] = useState(false);
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
     const [whaleTrades, setWhaleTrades] = useState<WhaleTrade[]>([]);
-    const [settings, setSettings] = useState<ScannerSettings>({
+
+    // Independent Settings States
+    const [scannerSettings, setScannerSettings] = useState<ScannerSettings>({
         minWhaleCount: 0,
         minVolumeUsd: 0,
+        minLiquidity: 0,
+        maxSpread: 0.10, // Permissive for Scanner
+        maxTimeHours: 0,
         minNewsCount: 0,
         minScore: 0,
-        showWatchLevel: true,
+        showWatchLevel: true // Show everything by default
     });
-    const [activeTab, setActiveTab] = useState<'scanner' | 'equilibrage'>('scanner');
+
+    const [proInsightSettings, setProInsightSettings] = useState<ScannerSettings>({
+        minWhaleCount: 0,
+        minVolumeUsd: 1000,
+        minLiquidity: 1000,
+        maxSpread: 0.05, // Stricter for Pro (5 cents)
+        maxTimeHours: 0,
+        minNewsCount: 0,
+        minScore: 40, // Quality filter
+        showWatchLevel: false // Hide noise by default
+    });
+
+    const [activeTab, setActiveTab] = useState<'scanner' | 'equilibrage' | 'hot'>('scanner');
+    // Use strings to allow empty '' state
+    const [hotSettings, setHotSettings] = useState({ amount: '', profit: '', strategy: 'whale' });
+
+    // Computed Settings based on Tab
+    const activeSettings = activeTab === 'hot' ? proInsightSettings : scannerSettings;
+
+    // Update Handler
+    const handleSettingsUpdate = (newSettings: ScannerSettings) => {
+        if (activeTab === 'hot') {
+            setProInsightSettings(newSettings);
+        } else {
+            setScannerSettings(newSettings);
+        }
+    };
 
     // WebSocket connection for real-time updates
     const onSignalsUpdate = useCallback((newSignals: any[], cached: boolean, cacheAge: number | null, wsError: string | null) => {
@@ -454,14 +495,23 @@ export default function Dashboard() {
         try {
             setError(null);
 
-            // Choose endpoint based on tab
-            const endpoint = activeTab === 'equilibrage'
-                ? '/api/signals/equilibrage'
-                : '/api/signals/';
+            // PRO INSIGHTS LOGIC:
+            // All strategies (whale, yield, scalp) are automatic scans.
+
+            let endpoint = '/api/signals/';
+            if (activeTab === 'equilibrage') {
+                endpoint = '/api/signals/equilibrage';
+            } else if (activeTab === 'hot') {
+                endpoint = `/api/signals/hot?strategy=${hotSettings.strategy}`;
+            }
 
             const response = await fetch(endpoint);
 
             if (!response.ok) {
+                // Handle 404 (Endpoint not found - likely backend not updated/restarted)
+                if (response.status === 404) {
+                    throw new Error("Endpoint introuvable. Redémarrez le backend (LANCER.command).");
+                }
                 throw new Error(`HTTP ${response.status}`);
             }
 
@@ -469,6 +519,7 @@ export default function Dashboard() {
 
             // Check for API error message
             if (data.error) {
+                // Display specific backend error (e.g., CRASH details)
                 setError(data.error);
                 setSignals([]);
             } else if (data.signals && Array.isArray(data.signals)) {
@@ -476,12 +527,18 @@ export default function Dashboard() {
                 setLastUpdate(new Date());
             }
             setIsLoading(false);
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to fetch signals:', err);
-            setError('Backend non connecté. Lancez le backend avec LANCER.command');
+            // Show specific error if we caught one, otherwise generic
+            const msg = err.message || 'Erreur inconnue';
+            if (msg.includes("Redémarrez") || msg.includes("Failed to fetch")) {
+                setError('Backend non connecté ou obsolète. Lancez/Redémarrez avec LANCER.command');
+            } else {
+                setError(msg);
+            }
             setIsLoading(false);
         }
-    }, [activeTab]);
+    }, [activeTab, hotSettings]);
 
     // Initial fetch
     useEffect(() => {
@@ -509,15 +566,34 @@ export default function Dashboard() {
 
     // Filter signals based on settings
     const filteredSignals = signals.filter(signal => {
-        // Equilibrage tab has no client-side filtering (backend does it)
-        if (activeTab === 'equilibrage') return true;
+        // Universal Filters (Apply to ALL tabs, including Pro Insights)
+        // Uses activeSettings based on the current Tab
 
-        const scoreOn10 = Math.round(signal.score / 10);
-        if (scoreOn10 < settings.minScore) return false;
-        if (signal.whale_count < settings.minWhaleCount) return false;
-        if ((signal.volume_24h || 0) < settings.minVolumeUsd) return false;
-        if ((signal.news_count || 0) < settings.minNewsCount) return false;
-        if (!settings.showWatchLevel && signal.level === 'watch') return false;
+        // 1. Min Score
+        if (signal.score < activeSettings.minScore) return false;
+
+        // 2. Min Volume
+        if (signal.volume_24h < activeSettings.minVolumeUsd) return false;
+
+        // 3. Min Liquidity
+        if (signal.liquidity < activeSettings.minLiquidity) return false;
+
+        // 4. Min Whale Count (Added)
+        if (signal.whale_count < activeSettings.minWhaleCount) return false;
+
+        // 5. Max Spread (Advanced)
+        if (activeSettings.maxSpread > 0 && signal.spread > activeSettings.maxSpread) return false;
+
+        // 6. Time Horizon (Advanced)
+        if (activeSettings.maxTimeHours > 0) {
+            // If hours_remaining is 0 (or missing), we assume it fits unless it's strictly > maxTime
+            if (signal.hours_remaining > activeSettings.maxTimeHours) return false;
+        }
+
+        // 6. Watch Level Toggle
+        // If "Show Watch" is OFF, and signal is 'watch', hide it.
+        if (!activeSettings.showWatchLevel && signal.level === 'watch') return false;
+
         return true;
     });
 
@@ -526,7 +602,7 @@ export default function Dashboard() {
     const strongCount = signals.filter(s => s.level === 'strong').length;
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div className="min-h-screen bg-[#0B0E14] text-white p-6 font-sans">
             {/* Background */}
             <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sky-900/20 via-transparent to-transparent" />
 
@@ -650,7 +726,9 @@ export default function Dashboard() {
                         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
                             <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                 <Zap className="w-5 h-5 text-sky-400" />
+                                {activeTab === 'scanner' && 'Signaux Scanner'}
                                 {activeTab === 'equilibrage' ? 'Opportunités Équilibrage (45-55%)' : 'Signaux Scanner'}
+                                {activeTab === 'hot' && '🔥 Action Scanner'}
                                 <span className="ml-2 px-2 py-0.5 rounded-full bg-white/10 text-sm font-normal text-gray-400">
                                     {filteredSignals.length}
                                 </span>
@@ -680,8 +758,71 @@ export default function Dashboard() {
                                 >
                                     Équilibrage (45-55%)
                                 </button>
+                                <button
+                                    onClick={() => setActiveTab('hot')}
+                                    className={`
+                                        px-4 py-1.5 rounded-lg text-sm font-medium transition-all
+                                        ${activeTab === 'hot'
+                                            ? 'bg-indigo-500/20 text-indigo-400 shadow-sm'
+                                            : 'text-gray-400 hover:text-white hover:bg-white/5'}
+                                    `}
+                                >
+                                    🔎 Pro Insights
+                                </button>
                             </div>
                         </div>
+
+                        {/* Pro Insights Cockpit */}
+                        {activeTab === 'hot' && (
+                            <div className="bg-[#151921] border border-indigo-500/20 rounded-xl p-4 animate-in fade-in slide-in-from-top-2">
+                                <div className="flex flex-col gap-4">
+
+                                    {/* 1. Strategy Selector */}
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => setHotSettings(prev => ({ ...prev, strategy: 'whale' }))}
+                                            className={`px-4 py-3 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${hotSettings.strategy === 'whale' ? 'bg-indigo-600 text-white shadow-lg ring-1 ring-white/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
+                                        >
+                                            🐋 Whale Copier <span className="text-[10px] font-normal opacity-70 ml-1">Volume &gt;25k</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setHotSettings(prev => ({ ...prev, strategy: 'yield' }))}
+                                            className={`px-4 py-3 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${hotSettings.strategy === 'yield' ? 'bg-emerald-600 text-white shadow-lg ring-1 ring-white/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
+                                        >
+                                            🛡️ Safe Yield <span className="text-[10px] font-normal opacity-70 ml-1">Hedge &lt;96%</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setHotSettings(prev => ({ ...prev, strategy: 'scalp' }))}
+                                            className={`px-4 py-3 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${hotSettings.strategy === 'scalp' ? 'bg-orange-600 text-white shadow-lg ring-1 ring-white/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
+                                        >
+                                            🦅 Scalp Pro <span className="text-[10px] font-normal opacity-70 ml-1">Spread &gt;3c</span>
+                                        </button>
+                                    </div>
+
+                                    {/* 2. Dynamic Info Panel */}
+                                    <div className="flex items-center gap-4 bg-black/20 p-3 rounded-lg border border-white/5 min-h-[50px]">
+                                        {hotSettings.strategy === 'whale' && (
+                                            <div className="flex items-center gap-2 text-indigo-400 animate-in fade-in">
+                                                <span className="font-bold">CALL:</span>
+                                                <span>Suivez la "Smart Money". Ces marchés ont des volumes massifs (&gt;25k$/24h) signalant une action imminente.</span>
+                                            </div>
+                                        )}
+                                        {hotSettings.strategy === 'yield' && (
+                                            <div className="flex items-center gap-2 text-emerald-400 animate-in fade-in">
+                                                <span className="font-bold">CALL:</span>
+                                                <span>Opportunité "Risk-Free". La somme des cotes est &lt; 98 cents. Achetez tout pour un profit garanti.</span>
+                                            </div>
+                                        )}
+                                        {hotSettings.strategy === 'scalp' && (
+                                            <div className="flex items-center gap-2 text-orange-400 animate-in fade-in">
+                                                <span className="font-bold">CALL:</span>
+                                                <span>Spread Inefficace (&gt;3 cts). Placez des ordres limites au milieu pour capturer la valeur.</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {filteredSignals.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -690,7 +831,9 @@ export default function Dashboard() {
                                 <p className="text-sm text-gray-500">
                                     {activeTab === 'equilibrage'
                                         ? "Aucun marché ne se trouve actuellement dans la zone 45-55%."
-                                        : "Ajustez les paramètres pour voir plus de résultats."}
+                                        : activeTab === 'hot'
+                                            ? "Aucun signal ne correspond aux critères de 'Mouvement'. Le marché est calme."
+                                            : "Ajustez les paramètres pour voir plus de résultats."}
                                 </p>
                             </div>
                         ) : (
@@ -699,7 +842,10 @@ export default function Dashboard() {
                                     <SignalCard
                                         key={signal.id}
                                         signal={signal}
-                                        showScore={activeTab !== 'equilibrage'}
+                                        // Show score only in Scanner mode.
+                                        // In Hot mode, we show ROI in the 'reason' field (handled by backend string),
+                                        // so we might want to hide the standard score.
+                                        showScore={activeTab === 'scanner'}
                                     />
                                 ))}
                             </div>
@@ -718,9 +864,9 @@ export default function Dashboard() {
             {/* Settings Modal */}
             {showSettings && (
                 <SettingsPanel
-                    settings={settings}
+                    settings={activeSettings}
                     onClose={() => setShowSettings(false)}
-                    onUpdate={setSettings}
+                    onUpdate={handleSettingsUpdate}
                 />
             )}
         </div>
