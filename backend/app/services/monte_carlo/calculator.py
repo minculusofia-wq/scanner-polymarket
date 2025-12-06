@@ -162,7 +162,7 @@ class MonteCarloCalculator:
             Tuple of (asset, target_price, direction) or None if not parseable
         """
         question_lower = question.lower()
-        print(f"[MC] Parsing question: {question_lower[:80]}...")
+        # print(f"[MC] Parsing question: {question_lower[:80]}...")
         
         # Determine direction based on keywords
         if "dip" in question_lower or "fall" in question_lower or "drop" in question_lower:
@@ -177,7 +177,7 @@ class MonteCarloCalculator:
                 if match:
                     # Extract price
                     price_str = match.group(1).replace(",", "")
-                    print(f"[MC] Found match for {asset}: {price_str} (direction: {direction})")
+                    # print(f"[MC] Found match for {asset}: {price_str} (direction: {direction})")
                     try:
                         price = float(price_str)
                         return (asset, price, direction)
@@ -190,14 +190,14 @@ class MonteCarloCalculator:
                 match = re.search(pattern, question_lower)
                 if match:
                     price_str = match.group(1).replace(",", "")
-                    print(f"[MC] Found match for {asset}: {price_str} (direction: {direction})")
+                    # print(f"[MC] Found match for {asset}: {price_str} (direction: {direction})")
                     try:
                         price = float(price_str)
                         return (asset, price, direction)
                     except ValueError:
                         continue
 
-        print(f"[MC] No crypto or tradfi pattern matched")
+        # print(f"[MC] No crypto or tradfi pattern matched")
         return None
     
     def _extract_end_date(self, question: str, end_date_iso: str) -> str:

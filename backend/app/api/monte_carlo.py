@@ -111,11 +111,15 @@ async def get_edge_opportunities(
                 return edge_opp
             return None
 
-        # Gather results
+        # Gather results with exception handling
         tasks = [process_market(m) for m in markets]
-        results = await asyncio.gather(*tasks)
+        # return_exceptions=True prevents one failure from crashing the whole request
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
         for res in results:
+            if isinstance(res, Exception):
+                print(f"Error processing market: {res}")
+                continue
             if res:
                 crypto_count += 1
                 if abs(res.edge) >= min_edge:
@@ -130,7 +134,8 @@ async def get_edge_opportunities(
             crypto_markets_analyzed=crypto_count,
         )
     except Exception as e:
-        print(f"Error scanning markets: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error scanning markets: {str(e)}")
 
 
