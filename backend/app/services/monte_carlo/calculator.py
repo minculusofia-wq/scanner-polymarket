@@ -249,14 +249,24 @@ class MonteCarloCalculator:
                 df['date'] = pd.to_datetime(df['date'])
                 df.set_index('date', inplace=True)
         else:
+            # Convert Binance symbols to Yahoo symbols
+            # BTCUSDT -> BTC-USD, ETHUSDT -> ETH-USD, etc.
+            yahoo_symbol = symbol
             if "USDT" in symbol:
-                print(f"Fetching {symbol} from Binance...")
-                df = await get_binance_ohlcv(symbol, "1h", 365 * 24)
-            else:
-                print(f"Fetching {symbol} from Yahoo...")
-                # Yahoo handles async internally or is fast enough for now
-                loop = asyncio.get_event_loop()
-                df = await loop.run_in_executor(None, get_yahoo_ohlcv, symbol, "1h", "2y")
+                yahoo_symbol = symbol.replace("USDT", "-USD")
+            
+            print(f"Fetching {yahoo_symbol} from Yahoo Finance...")
+            loop = asyncio.get_event_loop()
+            try:
+                df = await loop.run_in_executor(None, get_yahoo_ohlcv, yahoo_symbol, "1h", "2y")
+            except Exception as e:
+                print(f"Yahoo fetch failed for {yahoo_symbol}: {e}")
+                # Try daily data as fallback
+                try:
+                    df = await loop.run_in_executor(None, get_yahoo_ohlcv, yahoo_symbol, "1d", "2y")
+                except Exception as e2:
+                    print(f"Yahoo daily fetch also failed: {e2}")
+                    raise ValueError(f"Cannot fetch data for {symbol}")
 
             # Cache as dict for JSON serialization - convert timestamps to strings
             cache_data = df.reset_index().copy()
