@@ -516,6 +516,19 @@ export default function Dashboard() {
             // PRO INSIGHTS LOGIC:
             // All strategies (whale, yield, scalp) are automatic scans.
 
+            // Special case: Arbitrage uses a different endpoint
+            if (activeTab === 'hot' && hotSettings.strategy === 'arbitrage') {
+                const arbResponse = await fetch('/api/signals/arbitrage');
+                if (arbResponse.ok) {
+                    const arbData = await arbResponse.json();
+                    if (arbData.opportunities && Array.isArray(arbData.opportunities)) {
+                        setArbitrageOpps(arbData.opportunities);
+                    }
+                }
+                setIsLoading(false);
+                return;
+            }
+
             let endpoint = '/api/signals?limit=1000';
             if (activeTab === 'equilibrage') {
                 endpoint = '/api/signals/equilibrage?limit=1000';
