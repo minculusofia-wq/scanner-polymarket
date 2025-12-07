@@ -20,9 +20,9 @@ async def analyze_fade_opportunity(market: Dict[str, Any]) -> Tuple[Optional[str
         if market.get("closed"):
             return None, None, 0
             
-        # Liquidity Check (> $10k to ensure we can exit)
+        # Liquidity Check (lowered to $2k to capture more opportunities)
         liquidity = float(market.get("liquidityNum") or 0)
-        if liquidity < 10000:
+        if liquidity < 2000:
             return None, None, 0
 
         # Parse Prices
@@ -39,7 +39,6 @@ async def analyze_fade_opportunity(market: Dict[str, Any]) -> Tuple[Optional[str
             return None, None, 0
 
         # 3. Sentiment Check (Global Crypto)
-        # We start with a simple heuristic: Global Fear & Greed
         sentiment_score = 50
         sentiment_label = "Neutral"
         
@@ -47,28 +46,36 @@ async def analyze_fade_opportunity(market: Dict[str, Any]) -> Tuple[Optional[str
         is_crypto = any(x in question for x in ["bitcoin", "btc", "ethereum", "eth", "solana", "sol", "token", "crypto"])
         
         if is_crypto:
-            sentiment_data = await get_crypto_fear_and_greed()
-            sentiment_score = sentiment_data.get("score", 50)
-            sentiment_label = sentiment_data.get("value_classification", "Neutral")
+            try:
+                sentiment_data = await get_crypto_fear_and_greed()
+                sentiment_score = sentiment_data.get("score", 50)
+                sentiment_label = sentiment_data.get("value_classification", "Neutral")
+            except Exception:
+                sentiment_score = 50
+                sentiment_label = "Unknown"
             
-            # STRATEGY: FADE if Price is High AND Sentiment is GREED (> 60)
-            if sentiment_score > 60:
-                # Calculate "Hype Score"
-                # Hype = (Price * 100) + (Sentiment - 50)
-                # Ex: Price 0.70, Sentiment 80 -> 70 + 30 = 100
+            # STRATEGY: FADE if Price is High AND Sentiment is GREED (> 55)
+            if sentiment_score > 55:
                 hype_score = (yes_price * 100) + (sentiment_score - 50)
-                
-                # Dynamic Message
                 msg = f"FADE HYPE: YES {yes_price:.2f} (Sent: {sentiment_label})"
                 return "FADE", msg, hype_score
-                
-        # 4. (Future) TradFi / Event checks can go here
         
-        # Fallback: Simple High Price without sentiment confirmation?
-        # Maybe too risky to auto-fade everything. We stick to Crypto+Greed for now.
+        # 4. Non-Crypto Fallback: Pure Price-Based Fade
+        # If YES price is very high (> 75%), it's potentially overhyped regardless of sentiment
+        if yes_price >= 0.75:
+            hype_score = yes_price * 100
+            msg = f"FADE HIGH: YES {yes_price:.2f} (Contrarian)"
+            return "FADE", msg, hype_score
+        
+        # 5. Moderate Price: Show as "Watch" opportunity
+        if yes_price >= 0.65:
+            hype_score = yes_price * 50  # Lower priority
+            msg = f"FADE WATCH: YES {yes_price:.2f}"
+            return "FADE", msg, hype_score
         
     except Exception as e:
         print(f"Error in fade strategy: {e}")
         pass
         
     return None, None, 0
+

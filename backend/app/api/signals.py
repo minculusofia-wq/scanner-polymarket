@@ -488,40 +488,47 @@ async def get_hot_signals(
                         sort_score = volume
 
                 elif strategy == "yield":
-                    # Logic: Sum of prices < 0.98 (Arb/Yield).
-                    # Often found in multi-outcome markets, but this endpoint fetches all.
-                    # We check the sum of ALL outcomes if available, but here we have YES/NO mostly or simple arrays.
+                    # Logic: Sum of prices < 1.0 indicates arbitrage opportunity.
                     # Standard Polymarket is Binary (2 outcomes). Sum should be 1.0.
-                    # Yield exists if sum < 1.0 due to spread/inefficiency.
+                    # Any gap represents potential yield.
                     
                     price_sum = sum([float(p) for p in outcome_prices])
                     
-                    # Filter: Liquidity must be decent (>1000) to be executable.
-                    if liquidity < 1000: continue
-
-                    if price_sum < 0.98: # 2% Edge minimum
+                    # Calculate potential yield from buying all outcomes
+                    # If sum < 1.0, buying all = guaranteed profit
+                    # If sum > 1.0 but close, still worth showing
+                    
+                    if price_sum < 1.0:
                         opportunity_side = "HEDGE"
                         yield_pct = (1.0 - price_sum) * 100
                         display_msg = f"SAFE YIELD: +{yield_pct:.1f}%"
                         sort_score = yield_pct
+                    elif price_sum < 1.02 and liquidity > 500:
+                        # Near-parity: Small edge but still opportunity
+                        opportunity_side = "HEDGE"
+                        yield_pct = (1.0 - price_sum) * 100  # Will be negative but small
+                        display_msg = f"NEAR PARITY: {price_sum:.2f}"
+                        sort_score = 1.0 - price_sum
 
                 elif strategy == "scalp":
-                    # Logic: Spread > 3 cents.
-                    # Need BestBid and BestAsk.
-                    best_bid = float(market.get("bestBid") or 0)
-                    best_ask = float(market.get("bestAsk") or 0)
+                    # Logic: Detect wide spreads between YES and NO prices.
+                    # In a perfect market: YES + NO = 1.0
+                    # If YES + NO > 1.0, there's a spread we can scalp.
                     
-                    # If data missing, skip
-                    if best_bid == 0 or best_ask == 0: continue
+                    price_sum = yes_price + no_price
+                    spread = price_sum - 1.0
                     
-                    spread = best_ask - best_bid
-                    
-                    # Filter: Spread > 0.03 AND Liquidity > 5000 (To ensure we can get filled eventualy)
-                    if liquidity < 5000: continue
-                    
-                    if spread >= 0.03:
+                    # Filter: Spread > 1 cent (0.01) and decent liquidity
+                    if spread > 0.01 and liquidity > 1000:
                         opportunity_side = "SCALP"
-                        display_msg = f"SCALP SPREAD: {spread * 100:.1f}c"
+                        spread_cents = spread * 100
+                        display_msg = f"SCALP SPREAD: {spread_cents:.1f}c"
+                        sort_score = spread
+                    elif spread > 0.005 and liquidity > 5000:
+                        # Smaller spread but high liquidity = still tradeable
+                        opportunity_side = "SCALP"
+                        spread_cents = spread * 100
+                        display_msg = f"TIGHT SCALP: {spread_cents:.1f}c"
                         sort_score = spread
 
                 elif strategy == "fade":

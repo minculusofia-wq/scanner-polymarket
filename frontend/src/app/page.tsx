@@ -516,13 +516,13 @@ export default function Dashboard() {
             // PRO INSIGHTS LOGIC:
             // All strategies (whale, yield, scalp) are automatic scans.
 
-            let endpoint = '/api/signals/?limit=1000';
+            let endpoint = '/api/signals?limit=1000';
             if (activeTab === 'equilibrage') {
-                endpoint = '/api/signals/equilibrage/?limit=1000';
+                endpoint = '/api/signals/equilibrage?limit=1000';
             } else if (activeTab === 'hot') {
-                endpoint = `/api/signals/hot/?strategy=${hotSettings.strategy}&limit=1000`;
+                endpoint = `/api/signals/hot?strategy=${hotSettings.strategy}&limit=1000`;
             } else if (activeTab === 'contrarian') {
-                endpoint = `/api/signals/hot/?strategy=fade&limit=1000`;
+                endpoint = `/api/signals/hot?strategy=fade&limit=1000`;
             }
 
             const response = await fetch(endpoint);
