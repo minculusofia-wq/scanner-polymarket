@@ -372,7 +372,7 @@ async def get_signals(
 
 @router.get("/equilibrage", response_model=SignalResponse)
 async def get_equilibrage_signals(
-    limit: int = Query(default=100, le=500)
+    limit: int = Query(default=1000, le=5000)
 ):
     """
     Get 'Equilibrage' signals:
@@ -421,7 +421,7 @@ async def get_hot_signals(
     amount: float = Query(default=0, ge=0),
     target_profit: float = Query(default=0, ge=0),
     strategy: str = Query(default="whale"), # whale, yield, scalp
-    limit: int = Query(default=100, le=500)
+    limit: int = Query(default=1000, le=5000)
 ):
     """
     Get 'Pro Insights' Calls based on Insider Strategies.
