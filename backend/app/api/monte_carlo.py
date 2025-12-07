@@ -65,7 +65,7 @@ async def calculate_probability(request: ProbabilityRequest):
 @router.get("/edge", response_model=EdgeResponse)
 async def get_edge_opportunities(
     min_edge: float = Query(default=0.05, ge=0, le=1, description="Minimum edge threshold"),
-    limit: int = Query(default=20, le=100, description="Maximum opportunities to return"),
+    limit: int = Query(default=1000, le=5000, description="Maximum opportunities to return"),
 ):
     """
     Scan Polymarket for edge opportunities using Monte Carlo analysis.
