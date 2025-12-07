@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Zap, Activity, Info, TrendingUp, SlidersHorizontal, RefreshCw, Layers, ArrowUpRight, DollarSign, Filter, Loader2, Play, Users, Brain, Wifi, WifiOff, Fish, AlertTriangle, ExternalLink, ArrowDownRight, Clock, Eye, X } from 'lucide-react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { StatCard } from '@/components/StatCard';
-import { SignalCard } from '@/components/SignalCard';
+
 import { ArbitrageCard } from '@/components/ArbitrageCard';
 import MonteCarloPanel from '@/components/MonteCarloPanel';
 
@@ -448,23 +447,10 @@ export default function Dashboard() {
     // State holding settings for ALL tabs
     const [tabSettings, setTabSettings] = useState<Record<string, ScannerSettings>>({
         scanner: { ...defaultSettings },
-        // Equilibrage: Loose defaults, but independent. User can tighten them.
-        equilibrage: { ...defaultSettings, maxSpread: 1.0 },
-        // Pro Insights: Stricter defaults
-        hot: {
-            ...defaultSettings,
-            minVolumeUsd: 1000,
-            minLiquidity: 1000,
-            maxSpread: 0.05,
-            minScore: 4
-        },
-        // Contrarian: Specific defaults
-        contrarian: {
-            ...defaultSettings,
-            minLiquidity: 1000,
-            minScore: 4
-        },
-        quant: { ...defaultSettings } // Unused but kept for type safety
+        equilibrage: { ...defaultSettings },
+        hot: { ...defaultSettings },
+        contrarian: { ...defaultSettings },
+        quant: { ...defaultSettings }
     });
 
     const [activeTab, setActiveTab] = useState<'scanner' | 'equilibrage' | 'hot' | 'quant' | 'contrarian'>('scanner');
@@ -530,13 +516,13 @@ export default function Dashboard() {
             // PRO INSIGHTS LOGIC:
             // All strategies (whale, yield, scalp) are automatic scans.
 
-            let endpoint = '/api/signals/';
+            let endpoint = '/api/signals/?limit=1000';
             if (activeTab === 'equilibrage') {
-                endpoint = '/api/signals/equilibrage/';
+                endpoint = '/api/signals/equilibrage/?limit=1000';
             } else if (activeTab === 'hot') {
-                endpoint = `/api/signals/hot/?strategy=${hotSettings.strategy}`;
+                endpoint = `/api/signals/hot/?strategy=${hotSettings.strategy}&limit=1000`;
             } else if (activeTab === 'contrarian') {
-                endpoint = `/api/signals/hot/?strategy=fade`;
+                endpoint = `/api/signals/hot/?strategy=fade&limit=1000`;
             }
 
             const response = await fetch(endpoint);

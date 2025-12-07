@@ -136,6 +136,7 @@ async def get_edge_opportunities(
     except Exception as e:
         import traceback
         traceback.print_exc()
+        print(f"CRITICAL ERROR in get_edge_opportunities: {e}")
         raise HTTPException(status_code=500, detail=f"Error scanning markets: {str(e)}")
 
 

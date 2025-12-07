@@ -321,7 +321,7 @@ async def get_signals(
     min_volume: float = Query(default=0, ge=0),
     min_liquidity: float = Query(default=0, ge=0),
     level: Optional[str] = Query(default=None),
-    limit: int = Query(default=50, le=200)
+    limit: int = Query(default=1000, le=5000)
 ):
     """
     Get signals from Polymarket with caching.
