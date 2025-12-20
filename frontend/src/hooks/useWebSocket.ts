@@ -1,20 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { WhaleTrade, WebSocketMessage, WebSocketCallbacks, SignalsData } from '@/types';
 
-interface WebSocketMessage {
-    type: string;
-    data?: any;
-    error?: string;
-    message?: string;
-}
-
-interface UseWebSocketOptions {
-    onSignalsUpdate?: (signals: any[], cached: boolean, cacheAge: number | null, error: string | null) => void;
-    onWhaleTrade?: (trade: any) => void;
-    onConnect?: () => void;
-    onDisconnect?: () => void;
-}
+type UseWebSocketOptions = WebSocketCallbacks;
 
 export function useWebSocket(options: UseWebSocketOptions) {
     const [isConnected, setIsConnected] = useState(false);
@@ -68,10 +57,11 @@ export function useWebSocket(options: UseWebSocketOptions) {
                     switch (message.type) {
                         case 'signals_update':
                             if (message.data) {
+                                const signalsData = message.data as SignalsData;
                                 callbacksRef.current.onSignalsUpdate?.(
-                                    message.data.signals || [],
-                                    message.data.cached || false,
-                                    message.data.cache_age || null,
+                                    signalsData.signals || [],
+                                    signalsData.cached || false,
+                                    signalsData.cache_age || null,
                                     message.error || null
                                 );
                             }
@@ -79,7 +69,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
 
                         case 'whale_trade':
                             if (message.data) {
-                                callbacksRef.current.onWhaleTrade?.(message.data);
+                                callbacksRef.current.onWhaleTrade?.(message.data as WhaleTrade);
                             }
                             break;
 

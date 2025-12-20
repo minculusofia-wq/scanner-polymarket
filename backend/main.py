@@ -14,6 +14,9 @@ load_dotenv()
 from app.api import signals, whales, markets, volume, history, news, monte_carlo
 from app.core.websocket import manager, MessageTypes
 from app.core.database import db
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # Background task for periodic updates
@@ -44,7 +47,7 @@ async def periodic_broadcast():
                         try:
                             db.save_signals_batch(signals_list)
                         except Exception as e:
-                            print(f"Database save error: {e}")
+                            logger.error(f"Database save error: {e}")
                     
                     await manager.broadcast({
                         "type": MessageTypes.SIGNALS_UPDATE,
@@ -57,13 +60,13 @@ async def periodic_broadcast():
                         "error": error
                     })
             except Exception as e:
-                print(f"Broadcast error: {e}")
+                logger.error(f"Broadcast error: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    print("🚀 Starting Polymarket Scanner Bot...")
+    logger.info("Starting Polymarket Scanner Bot...")
     
     # Start background broadcast task
     broadcast_task = asyncio.create_task(periodic_broadcast())
@@ -72,7 +75,7 @@ async def lifespan(app: FastAPI):
     
     # Cleanup
     broadcast_task.cancel()
-    print("👋 Shutting down Polymarket Scanner Bot...")
+    logger.info("Shutting down Polymarket Scanner Bot...")
 
 
 # FastAPI application

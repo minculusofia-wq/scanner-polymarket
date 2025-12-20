@@ -1,38 +1,7 @@
 import React from 'react';
-import { ArrowUpRight, ArrowDownRight, ExternalLink, Activity, Info, TrendingUp, Fish, Newspaper, DollarSign, Users } from 'lucide-react';
-
-
-interface Signal {
-    id: string;
-    score: number;
-    level: 'opportunity' | 'strong' | 'interesting' | 'watch';
-    direction: 'YES' | 'NO' | string; // Expanded for 'WHALE BUY: YES' etc
-    market_question: string;
-    whale_score: number;
-    volume_score: number;
-    news_score: number;
-    whale_count: number;
-    unique_whale_count: number;
-    volume_24h: number;
-    news_count: number;
-    yes_price: number;
-    no_price: number;
-    price_movement: number;
-    liquidity: number;
-    spread: number;
-    hours_remaining: number;
-    end_date: string;
-    polymarket_url: string;
-}
-
-const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-    }).format(value);
-};
+import { ArrowUpRight, ArrowDownRight, ExternalLink, Activity, Info, Fish, Users } from 'lucide-react';
+import { Signal } from '@/types';
+import { formatCurrency } from '@/utils/formatting';
 
 export function SignalCard({ signal }: { signal: Signal }) {
     // Dynamic color based on level

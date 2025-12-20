@@ -9,7 +9,11 @@ import httpx
 import json
 
 from app.core.cache import cache
+from app.core.logger import get_logger
 from app.services.strategies.fade import analyze_fade_opportunity
+from app.utils.market import get_yes_no_prices
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -77,7 +81,7 @@ async def fetch_markets_from_api():
                             break
                             
                         all_markets.extend(data)
-                        print(f"Fetched {len(data)} markets (Offset: {offset})")
+                        logger.debug(f"Fetched {len(data)} markets (Offset: {offset})")
                         
                         if len(data) < limit:
                             break
@@ -88,20 +92,20 @@ async def fetch_markets_from_api():
                         if offset > 10000:
                             break
                     else:
-                        print(f"API Error {response.status_code}: {response.text}")
+                        logger.warning(f"API Error {response.status_code}: {response.text}")
                         break
                         
                 except Exception as e:
-                    print(f"Error checking url {url}: {e}")
+                    logger.error(f"Error checking url {url}: {e}")
                     break
             
             if len(all_markets) > 0:
-                print(f"Total markets fetched: {len(all_markets)}")
+                logger.info(f"Total markets fetched: {len(all_markets)}")
                 return all_markets, None
                 
             return None, "Aucun marché trouvé (API error?)"
         except Exception as e:
-            print(f"Error fetching markets: {e}")
+            logger.error(f"Error fetching markets: {e}")
             return None, str(e)
 
 
@@ -224,13 +228,7 @@ def calculate_score(market: dict) -> tuple[int, str]:
 
 def parse_prices(market: dict):
     """Parse prices safely."""
-    try:
-        outcome_prices = json.loads(market.get("outcomePrices", "[\"0\", \"0\"]"))
-        yes_price = float(outcome_prices[0]) if len(outcome_prices) > 0 else 0
-        no_price = float(outcome_prices[1]) if len(outcome_prices) > 1 else 0
-        return yes_price, no_price
-    except Exception:
-        return 0.5, 0.5
+    return get_yes_no_prices(market)
 
 
 def market_to_signal(market: dict) -> Signal:

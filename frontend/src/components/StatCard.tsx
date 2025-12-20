@@ -1,11 +1,5 @@
 import React from 'react';
-
-interface StatCardProps {
-    title: string;
-    value: string;
-    icon: any;
-    color: 'sky' | 'green' | 'purple' | 'orange' | 'yellow' | 'indigo' | 'rose' | 'fuchsia';
-}
+import { StatCardProps } from '@/types';
 
 const colors = {
     sky: 'from-sky-500 to-blue-600',

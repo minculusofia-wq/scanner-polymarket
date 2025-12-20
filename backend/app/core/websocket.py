@@ -6,6 +6,9 @@ from typing import List, Dict, Any
 import asyncio
 import json
 from datetime import datetime
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ConnectionManager:
@@ -27,14 +30,14 @@ class ConnectionManager:
         await websocket.accept()
         async with self._lock:
             self.active_connections.append(websocket)
-        print(f"🔌 Client connected. Total: {len(self.active_connections)}")
+        logger.info(f"Client connected. Total: {len(self.active_connections)}")
     
     async def disconnect(self, websocket: WebSocket):
         """Remove a WebSocket connection."""
         async with self._lock:
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)
-        print(f"🔌 Client disconnected. Total: {len(self.active_connections)}")
+        logger.info(f"Client disconnected. Total: {len(self.active_connections)}")
     
     async def broadcast(self, message: Dict[str, Any]):
         """Broadcast a message to all connected clients."""
@@ -56,7 +59,7 @@ class ConnectionManager:
             for conn in dead_connections:
                 if conn in self.active_connections:
                     self.active_connections.remove(conn)
-                    print(f"🔌 Dead connection removed. Total: {len(self.active_connections)}")
+                    logger.debug(f"Dead connection removed. Total: {len(self.active_connections)}")
     
     async def send_personal(self, websocket: WebSocket, message: Dict[str, Any]):
         """Send a message to a specific client."""

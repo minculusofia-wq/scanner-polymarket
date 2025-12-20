@@ -6,86 +6,8 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 
 import { ArbitrageCard } from '@/components/ArbitrageCard';
 import MonteCarloPanel from '@/components/MonteCarloPanel';
-
-// ============ Types ============
-interface Signal {
-    id: string;
-    market_id: string;
-    condition_id: string;
-    slug: string;
-    market_question: string;
-    score: number;
-    level: 'watch' | 'interesting' | 'strong' | 'opportunity';
-    direction: 'YES' | 'NO';
-    whale_score: number;
-    volume_score: number;
-    news_score: number;
-    whale_count: number;
-    unique_whale_count: number;
-    volume_24h: number;
-    news_count: number;
-    yes_price: number;
-    no_price: number;
-    price_movement: number;
-    liquidity: number;
-    spread: number;
-    hours_remaining: number;
-    end_date: string;
-    polymarket_url: string;
-    created_at: string;
-}
-
-interface ScannerSettings {
-    minWhaleCount: number; // Min Trades
-    minUniqueWhales: number; // Min Unique Whales
-    minVolumeUsd: number;
-    minLiquidity: number;
-    maxSpread: number; // Max spread allowed in cents
-    maxTimeHours: number; // 0 = All time
-    minNewsCount: number;
-    minScore: number;
-    showWatchLevel: boolean;
-}
-
-interface WhaleTrade {
-    id: string;
-    trader: string;
-    market_id: string;
-    market_question: string;
-    slug: string;
-    side: 'YES' | 'NO';
-    amount: number;
-    price: number;
-    timestamp: string;
-    size_usd: number;
-}
-
-interface ArbitrageOpportunity {
-    event_id: string;
-    event_slug: string;
-    event_title: string;
-    market_count: number;
-    sum_yes_price: number;
-    profit_pct: number;
-    markets: any[];
-}
-
-// ============ Utility Functions ============
-function formatCurrency(value: number): string {
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-    return `$${value.toFixed(0)}`;
-}
-
-function formatTimeAgo(timestamp: string): string {
-    const diff = Date.now() - new Date(timestamp).getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
-}
+import { Signal, ScannerSettings, WhaleTrade, ArbitrageOpportunity } from '@/types';
+import { formatCurrency, formatTimeAgo } from '@/utils/formatting';
 
 // ============ Settings Panel ============
 function SettingsPanel({
@@ -470,7 +392,7 @@ export default function Dashboard() {
     };
 
     // WebSocket connection for real-time updates
-    const onSignalsUpdate = useCallback((newSignals: any[], _cached: boolean, _cacheAge: number | null, wsError: string | null) => {
+    const onSignalsUpdate = useCallback((newSignals: Signal[], _cached: boolean, _cacheAge: number | null, wsError: string | null) => {
         // Only update signals from WS if we are in 'scanner' mode
         // (WS broadcasts default scanner results, not Equilibrage results)
         if (activeTab !== 'scanner') return;
@@ -484,7 +406,7 @@ export default function Dashboard() {
         }
     }, [isLive, activeTab]);
 
-    const onWhaleTrade = useCallback((trade: any) => {
+    const onWhaleTrade = useCallback((trade: WhaleTrade) => {
         setWhaleTrades(prev => [trade, ...prev].slice(0, 20));
     }, []);
 
@@ -560,10 +482,10 @@ export default function Dashboard() {
                 setLastUpdate(new Date());
             }
             setIsLoading(false);
-        } catch (err: any) {
+        } catch (err) {
             console.error('Failed to fetch signals:', err);
             // Show specific error if we caught one, otherwise generic
-            const msg = err.message || 'Erreur inconnue';
+            const msg = err instanceof Error ? err.message : 'Erreur inconnue';
             if (msg.includes("Redémarrez") || msg.includes("Failed to fetch")) {
                 setError('Backend non connecté ou obsolète. Lancez/Redémarrez avec LANCER.command');
             } else {

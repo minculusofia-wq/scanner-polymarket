@@ -8,6 +8,9 @@ from datetime import datetime
 
 from app.services.monte_carlo.calculator import mc_calculator, EdgeOpportunity
 from app.api.signals import fetch_markets, market_to_signal
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -118,7 +121,7 @@ async def get_edge_opportunities(
         
         for res in results:
             if isinstance(res, Exception):
-                print(f"Error processing market: {res}")
+                logger.warning(f"Error processing market: {res}")
                 continue
             if res:
                 crypto_count += 1
@@ -136,7 +139,7 @@ async def get_edge_opportunities(
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"CRITICAL ERROR in get_edge_opportunities: {e}")
+        logger.critical(f"Error in get_edge_opportunities: {e}")
         raise HTTPException(status_code=500, detail=f"Error scanning markets: {str(e)}")
 
 

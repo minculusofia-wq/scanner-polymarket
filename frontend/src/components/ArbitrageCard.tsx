@@ -1,26 +1,6 @@
 import React from 'react';
-import { ArrowRight, DollarSign, Percent, ExternalLink } from 'lucide-react';
-
-interface MarketDetail {
-    id: string;
-    question: string;
-    yes_price: number;
-    liquidity: number;
-}
-
-interface ArbitrageOpportunity {
-    event_id: string;
-    event_slug: string;
-    event_title: string;
-    market_count: number;
-    sum_yes_price: number;
-    profit_pct: number;
-    markets: MarketDetail[];
-}
-
-interface ArbitrageCardProps {
-    opportunity: ArbitrageOpportunity;
-}
+import { DollarSign, ExternalLink } from 'lucide-react';
+import { ArbitrageOpportunity, ArbitrageCardProps } from '@/types';
 
 export function ArbitrageCard({ opportunity }: ArbitrageCardProps) {
     // Calculate the width of the progress bar (capped at 100% for the base, overflow for profit)

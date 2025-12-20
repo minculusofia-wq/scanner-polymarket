@@ -2,36 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, Loader2, RefreshCw, ExternalLink, BarChart3 } from 'lucide-react';
-
-interface EdgeOpportunity {
-    market_id: string;
-    market_question: string;
-    slug: string;
-    polymarket_yes_price: number;
-    polymarket_no_price: number;
-    mc_probability: number;
-    mc_confidence_low: number;
-    mc_confidence_high: number;
-    edge: number;
-    edge_percent: number;
-    recommendation: 'BUY_YES' | 'BUY_NO' | 'HOLD';
-    confidence: 'HIGH' | 'MEDIUM' | 'LOW';
-    asset: string;
-    target_price: number;
-    end_date: string;
-    current_price: number;
-}
-
-interface EdgeResponse {
-    opportunities: EdgeOpportunity[];
-    total: number;
-    crypto_markets_analyzed: number;
-}
-
-function formatPrice(price: number): string {
-    if (price >= 1000) return `$${(price / 1000).toFixed(0)}k`;
-    return `$${price.toFixed(0)}`;
-}
+import { EdgeOpportunity, EdgeResponse } from '@/types';
+import { formatPrice } from '@/utils/formatting';
 
 function EdgeCard({ opportunity }: { opportunity: EdgeOpportunity }) {
     const isPositiveEdge = opportunity.edge > 0;

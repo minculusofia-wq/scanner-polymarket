@@ -7,6 +7,9 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from pathlib import Path
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class CacheService:
@@ -71,7 +74,7 @@ class CacheService:
                     "cached_at": datetime.now(timezone.utc).isoformat()
                 }, f)
         except (OSError, TypeError) as e:
-            print(f"Cache write error: {e}")
+            logger.warning(f"Cache write error: {e}")
     
     def get(self, key: str, max_age_seconds: int = 300) -> Optional[Any]:
         """
