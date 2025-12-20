@@ -38,9 +38,11 @@ export function useWebSocket(options: UseWebSocketOptions) {
         }
 
         try {
-            // Get WebSocket URL from current origin
+            // Get WebSocket URL from environment or current origin
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//localhost:8000/ws`;
+            const host = process.env.NEXT_PUBLIC_WS_HOST || window.location.hostname;
+            const port = process.env.NEXT_PUBLIC_WS_PORT || '8000';
+            const wsUrl = `${protocol}//${host}:${port}/ws`;
 
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;

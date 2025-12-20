@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Zap, Activity, Info, TrendingUp, SlidersHorizontal, RefreshCw, Layers, ArrowUpRight, DollarSign, Filter, Loader2, Play, Users, Brain, Wifi, WifiOff, Fish, AlertTriangle, ExternalLink, ArrowDownRight, Clock, Eye, X } from 'lucide-react';
+import { Zap, Activity, TrendingUp, SlidersHorizontal, RefreshCw, Layers, ArrowUpRight, Filter, Loader2, Wifi, WifiOff, Fish, ExternalLink, ArrowDownRight, Clock, X } from 'lucide-react';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
 import { ArbitrageCard } from '@/components/ArbitrageCard';
@@ -166,7 +166,7 @@ function SettingsPanel({
                                 { label: 'Tout', val: 0 },
                                 { label: '24h', val: 24 },
                                 { label: '3j', val: 72 },
-                                { label: '1s', val: 168 },
+                                { label: '1sem', val: 168 },
                             ].map((opt) => (
                                 <button
                                     key={opt.label}
@@ -470,7 +470,7 @@ export default function Dashboard() {
     };
 
     // WebSocket connection for real-time updates
-    const onSignalsUpdate = useCallback((newSignals: any[], cached: boolean, cacheAge: number | null, wsError: string | null) => {
+    const onSignalsUpdate = useCallback((newSignals: any[], _cached: boolean, _cacheAge: number | null, wsError: string | null) => {
         // Only update signals from WS if we are in 'scanner' mode
         // (WS broadcasts default scanner results, not Equilibrage results)
         if (activeTab !== 'scanner') return;
@@ -644,7 +644,6 @@ export default function Dashboard() {
 
     // Stats
     const opportunityCount = signals.filter(s => s.level === 'opportunity').length;
-    const strongCount = signals.filter(s => s.level === 'strong').length;
 
     return (
         <div className="min-h-screen bg-[#0B0E14] text-white p-6 font-sans">

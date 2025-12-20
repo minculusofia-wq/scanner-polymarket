@@ -36,7 +36,7 @@ async def periodic_broadcast():
                             if not m.get("closed") and m.get("question"):
                                 sig = market_to_signal(m)
                                 signals_list.append(sig.dict())
-                        except:
+                        except Exception:
                             pass
                     
                     # Save snapshot to database

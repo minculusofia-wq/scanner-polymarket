@@ -1,0 +1,330 @@
+================================================================================
+                    COMPLETE API LIST - POLYMARKET SCANNER
+================================================================================
+
+Generated: December 20, 2025
+
+================================================================================
+                         SECTION 1: BACKEND APIs (FastAPI)
+================================================================================
+
+------------------------------------------------------------------------------
+1. SIGNALS API - /api/signals
+   File: backend/app/api/signals.py
+------------------------------------------------------------------------------
+   GET  /api/signals                    Get signals with filters
+                                        Params: score, volume, liquidity, level
+
+   GET  /api/signals/equilibrage        Balanced signals (price 0.45-0.55)
+
+   GET  /api/signals/hot                "Pro Insights" calls by strategy
+                                        Params: strategy (whale|yield|scalp|fade)
+
+   GET  /api/signals/arbitrage          Negative risk arbitrage opportunities
+
+   GET  /api/signals/cache/stats        Cache statistics
+
+   POST /api/signals/cache/clear        Clear cache
+
+------------------------------------------------------------------------------
+2. MARKETS API - /api/markets
+   File: backend/app/api/markets.py
+------------------------------------------------------------------------------
+   GET  /api/markets                    List markets with filters
+                                        Params: category, active, sort_by, limit
+
+   GET  /api/markets/trending           Trending markets by volume
+
+   GET  /api/markets/{market_id}        Get specific market
+
+   GET  /api/markets/{market_id}/stats  Market statistics
+
+   GET  /api/markets/{market_id}/whales Whale activity on a market
+
+------------------------------------------------------------------------------
+3. WHALES API - /api/whales
+   File: backend/app/api/whales.py
+------------------------------------------------------------------------------
+   GET  /api/whales/trades              Recent whale trades
+                                        Params: limit, min_usd
+
+   GET  /api/whales/profiles            Top whale profiles by volume
+
+   GET  /api/whales/market/{market_id}  Whale activity for a market
+
+   GET  /api/whales/stats               Whale tracking statistics
+
+------------------------------------------------------------------------------
+4. VOLUME API - /api/volume
+   File: backend/app/api/volume.py
+------------------------------------------------------------------------------
+   GET  /api/volume                     Volume analysis for all markets
+                                        Params: min_ratio
+
+   GET  /api/volume/spikes              Markets with volume spikes
+                                        Params: threshold, hours
+
+   GET  /api/volume/alerts              Recent volume alerts
+
+   GET  /api/volume/{market_id}         Volume analysis for a market
+
+   GET  /api/volume/{market_id}/history Volume history
+
+------------------------------------------------------------------------------
+5. HISTORY API - /api/history
+   File: backend/app/api/history.py
+------------------------------------------------------------------------------
+   GET  /api/history/signals/{market_id}  Signal history
+                                          Params: hours
+
+   GET  /api/history/prices/{market_id}   Price history
+
+   GET  /api/history/trending             Markets with score changes
+
+   GET  /api/history/stats                Database statistics
+
+   POST /api/history/cleanup              Remove old data
+                                          Params: days
+
+------------------------------------------------------------------------------
+6. NEWS API - /api/news
+   File: backend/app/api/news.py
+------------------------------------------------------------------------------
+   GET  /api/news                       Latest news
+                                        Params: limit, source
+
+   GET  /api/news/market/{market_question}  Relevant news for a market
+
+   POST /api/news/refresh               Force refresh news sources
+
+------------------------------------------------------------------------------
+7. MONTE CARLO API - /api/monte-carlo
+   File: backend/app/api/monte_carlo.py
+------------------------------------------------------------------------------
+   POST /api/monte-carlo/probability    Calculate Monte Carlo probability
+                                        Body: asset, target_price, end_date
+                                        Assets: BTC, ETH, SOL, SPX, NDX, GOLD, OIL
+
+   GET  /api/monte-carlo/edge           Scan Polymarket edge opportunities
+                                        Params: min_edge, limit
+
+   GET  /api/monte-carlo/market/{market_id}  Monte Carlo edge for a market
+
+   GET  /api/monte-carlo/assets         List of supported assets
+
+------------------------------------------------------------------------------
+8. ROOT & WEBSOCKET
+   File: backend/main.py
+------------------------------------------------------------------------------
+   GET       /                          Application info
+
+   GET       /health                    Health check
+
+   WebSocket /ws                        Real-time connection
+                                        Messages: ping, pong, signals_update,
+                                                  whale_trade, connection_ack
+
+
+================================================================================
+                       SECTION 2: EXTERNAL APIs USED
+================================================================================
+
+------------------------------------------------------------------------------
+1. POLYMARKET APIs
+   File: backend/app/services/polymarket/client.py
+------------------------------------------------------------------------------
+   CLOB Base URL:  https://clob.polymarket.com
+   Gamma Base URL: https://gamma-api.polymarket.com
+
+   Endpoints used:
+   - GET /markets              List markets (pagination limit=1000)
+   - GET /markets/{market_id}  Specific market
+   - GET /trades               Recent trades
+   - GET /book                 Order book for a token
+   - GET /prices               Current token prices
+   - GET /prices-history       Price history
+
+------------------------------------------------------------------------------
+2. BINANCE API
+   File: backend/app/services/monte_carlo/binance_data.py
+------------------------------------------------------------------------------
+   Base URL: https://api.binance.com/api/v3
+
+   Endpoints used:
+   - GET /klines               OHLCV data (candlesticks)
+
+   Supported symbols:
+   - BTCUSDT
+   - ETHUSDT
+   - SOLUSDT
+
+   Intervals: 1m, 5m, 15m, 1h, 4h, 1d
+   Rate limit: 10 requests/batch with 1s pause
+
+------------------------------------------------------------------------------
+3. YAHOO FINANCE (yfinance library)
+   File: backend/app/services/monte_carlo/yahoo_data.py
+------------------------------------------------------------------------------
+   Python library: yfinance
+
+   Supported symbols:
+   - SPY, ^GSPC    (S&P 500)
+   - GC=F          (Gold Futures)
+   - CL=F          (Oil Futures)
+
+   Data: OHLCV
+   Period: 2 years by default
+
+------------------------------------------------------------------------------
+4. GOOGLE NEWS RSS (Free)
+   File: backend/app/services/news/aggregator.py
+------------------------------------------------------------------------------
+   URL: https://news.google.com/rss/search
+
+   Parameters:
+   - q      = search keyword
+   - hl     = en-US
+   - gl     = US
+   - ceid   = US:en
+
+   Authentication: None (free)
+
+------------------------------------------------------------------------------
+5. NEWSAPI
+   File: backend/app/services/news/aggregator.py
+------------------------------------------------------------------------------
+   URL: https://newsapi.org/v2/everything
+   Documentation: https://newsapi.org/docs
+
+   Parameters:
+   - q         = search query
+   - language  = language
+   - sortBy    = sort order
+   - pageSize  = number of results
+   - apiKey    = API key
+
+   Environment variable: NEWSAPI_KEY
+
+------------------------------------------------------------------------------
+6. SERPAPI (Google News)
+   File: backend/app/services/news/aggregator.py
+------------------------------------------------------------------------------
+   URL: https://serpapi.com/search.json
+   Documentation: https://serpapi.com/google-news-api
+
+   Parameters:
+   - engine   = google_news
+   - q        = query
+   - api_key  = API key
+
+   Environment variable: SERPAPI_KEY
+
+------------------------------------------------------------------------------
+7. CRYPTO FEAR & GREED INDEX
+   File: backend/app/services/monte_carlo/sentiment.py
+------------------------------------------------------------------------------
+   URL: https://api.alternative.me/fng/
+
+   Authentication: None (free)
+   Cache TTL: 1 hour
+
+   Data returned:
+   - Fear & Greed Index (0-100)
+   - Classification (Extreme Fear, Fear, Neutral, Greed, Extreme Greed)
+
+------------------------------------------------------------------------------
+8. ALPHA VANTAGE (TradFi Sentiment)
+   File: backend/app/services/monte_carlo/tradfi_sentiment.py
+------------------------------------------------------------------------------
+   URL: https://www.alphavantage.co/query
+
+   Function: NEWS_SENTIMENT
+
+   Environment variable: ALPHA_VANTAGE_KEY
+   Cache TTL: 1 hour
+
+   Usage: News sentiment analysis for traditional assets
+
+------------------------------------------------------------------------------
+9. FINNHUB (Macroeconomic Calendar)
+   File: backend/app/services/monte_carlo/macro.py
+------------------------------------------------------------------------------
+   URL: https://finnhub.io/api/v1/calendar/economic
+
+   Environment variable: FINNHUB_KEY
+   Cache TTL: 4 hours
+
+   Usage: Check for high-impact economic events
+
+
+================================================================================
+                     SECTION 3: ENVIRONMENT VARIABLES
+================================================================================
+
+File: .env (and .env.example)
+
+------------------------------------------------------------------------------
+REQUIRED API KEYS
+------------------------------------------------------------------------------
+NEWSAPI_KEY          Key for NewsAPI.org
+SERPAPI_KEY          Key for SerpAPI (Google News)
+ALPHA_VANTAGE_KEY    Key for Alpha Vantage (sentiment)
+FINNHUB_KEY          Key for Finnhub (macro calendar)
+
+------------------------------------------------------------------------------
+POLYMARKET CONFIGURATION
+------------------------------------------------------------------------------
+POLYMARKET_API_URL        https://clob.polymarket.com
+POLYMARKET_GAMMA_API_URL  https://gamma-api.polymarket.com
+
+------------------------------------------------------------------------------
+DATABASE & CACHE
+------------------------------------------------------------------------------
+DATABASE_URL         PostgreSQL URL
+REDIS_URL            Redis URL
+
+
+================================================================================
+                        SECTION 4: WEBSOCKET
+================================================================================
+
+------------------------------------------------------------------------------
+WEBSOCKET CONNECTION
+------------------------------------------------------------------------------
+Development:  ws://localhost:8000/ws
+Production:   wss://your-domain.com/ws
+
+Message types:
+- ping              Client -> Server (heartbeat)
+- pong              Server -> Client (heartbeat response)
+- connection_ack    Server -> Client (connection confirmation)
+- signals_update    Server -> Client (signals update, every 30s)
+- whale_trade       Server -> Client (new whale trade detected)
+
+
+================================================================================
+                          SECTION 5: INFRASTRUCTURE
+================================================================================
+
+Docker services:
+- Backend:    FastAPI + Uvicorn (port 8000)
+- Frontend:   Next.js (port 3000)
+- Database:   PostgreSQL 15 (port 5432)
+- Cache:      Redis 7 (port 6379)
+- Workers:    Celery
+- Scheduler:  Celery Beat
+
+
+================================================================================
+                         SECTION 6: CACHING STRATEGY
+================================================================================
+
+- Markets Cache:     60 seconds TTL (fallback to stale cache on error)
+- Sentiment Cache:   1 hour TTL (Fear & Greed, Alpha Vantage)
+- Macro Events:      4 hours TTL (Finnhub)
+- News Cache:        100 items max per source
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================
