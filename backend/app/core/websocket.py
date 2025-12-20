@@ -40,22 +40,23 @@ class ConnectionManager:
         """Broadcast a message to all connected clients."""
         if not self.active_connections:
             return
-        
+
         message_json = json.dumps(message, default=str)
-        
-        # Send to all connections, remove dead ones
-        dead_connections = []
-        
+
+        # Send to all connections, remove dead ones inside the lock
         async with self._lock:
+            dead_connections = []
             for connection in self.active_connections:
                 try:
                     await connection.send_text(message_json)
                 except Exception:
                     dead_connections.append(connection)
-        
-        # Remove dead connections
-        for conn in dead_connections:
-            await self.disconnect(conn)
+
+            # Remove dead connections while holding the lock
+            for conn in dead_connections:
+                if conn in self.active_connections:
+                    self.active_connections.remove(conn)
+                    print(f"🔌 Dead connection removed. Total: {len(self.active_connections)}")
     
     async def send_personal(self, websocket: WebSocket, message: Dict[str, Any]):
         """Send a message to a specific client."""

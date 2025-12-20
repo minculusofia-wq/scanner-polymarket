@@ -29,14 +29,16 @@ async def check_links():
                 try:
                     r_m = await client.head(url_m, follow_redirects=True)
                     print(f"   [Market URL] {r_m.status_code} {url_m}")
-                except: pass
-                
+                except Exception:
+                    pass
+
                 # Test Event Slug
                 url_e = f"https://polymarket.com/event/{event_slug}"
                 try:
                     r_e = await client.head(url_e, follow_redirects=True)
                     print(f"   [Event URL ] {r_e.status_code} {url_e}")
-                except: pass
+                except Exception:
+                    pass
             
             # Also test the one we currently use
             final_slug = market_slug or event_slug

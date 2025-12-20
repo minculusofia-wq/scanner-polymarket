@@ -88,7 +88,7 @@ def calculate_negative_risk(markets: List[Dict]) -> List[ArbitrageOpportunity]:
                     "yes_price": yes_price,
                     "liquidity": float(m.get("liquidityNum") or 0)
                 })
-            except:
+            except Exception:
                 valid_group = False
                 break
         

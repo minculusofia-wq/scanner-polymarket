@@ -3,10 +3,22 @@ Binance OHLCV Data Fetcher for Monte Carlo simulations.
 """
 import aiohttp
 import asyncio
+import os
 import pandas as pd
 import time
 from math import ceil
 from typing import Optional
+
+
+def _get_ssl_context():
+    """Get SSL context based on environment configuration."""
+    import ssl
+    if os.getenv("DISABLE_SSL_VERIFY", "").lower() == "true":
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        return ssl_context
+    return None  # Use default SSL verification
 
 
 # Interval to milliseconds mapping
@@ -85,13 +97,8 @@ async def _get_klines_async(
         })
     
     all_results = [None] * n_chunks
-    
-    # Create SSL context that skips verification (for VPN/proxy compatibility)
-    import ssl
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    
+    ssl_context = _get_ssl_context()
+
     connector = aiohttp.TCPConnector(ssl=ssl_context)
     async with aiohttp.ClientSession(connector=connector) as session:
         # Process in batches of 10 with 1s pause

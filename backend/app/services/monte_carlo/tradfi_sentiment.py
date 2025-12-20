@@ -2,13 +2,27 @@
 TradFi Asset Sentiment Service (Alpha Vantage).
 """
 import aiohttp
+import asyncio
 import os
 import time
 from typing import Dict, Any, Optional
 
-# Cache
+# Thread-safe cache with lock
 _SENTIMENT_CACHE = {}
+_cache_lock = asyncio.Lock()
 CACHE_TTL = 3600  # 1 hour
+
+
+def _get_ssl_context():
+    """Get SSL context based on environment configuration."""
+    import ssl
+    if os.getenv("DISABLE_SSL_VERIFY", "").lower() == "true":
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        return ssl_context
+    return None  # Use default SSL verification
+
 
 async def get_tradfi_sentiment(ticker: str) -> Dict[str, Any]:
     """
@@ -17,23 +31,20 @@ async def get_tradfi_sentiment(ticker: str) -> Dict[str, Any]:
     api_key = os.getenv("ALPHA_VANTAGE_KEY")
     if not api_key:
         return {"score": None, "label": None}
-        
+
     cache_key = f"sentiment_{ticker}"
     now = time.time()
-    
-    if cache_key in _SENTIMENT_CACHE:
-        cached = _SENTIMENT_CACHE[cache_key]
-        if now - cached["timestamp"] < CACHE_TTL:
-            return cached["data"]
+
+    # Check cache with lock
+    async with _cache_lock:
+        if cache_key in _SENTIMENT_CACHE:
+            cached = _SENTIMENT_CACHE[cache_key]
+            if now - cached["timestamp"] < CACHE_TTL:
+                return cached["data"]
 
     url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={ticker}&apikey={api_key}&limit=50"
-    
-    # SSL Bypass
-    import ssl
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    
+    ssl_context = _get_ssl_context()
+
     try:
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
@@ -67,11 +78,13 @@ async def get_tradfi_sentiment(ticker: str) -> Dict[str, Any]:
                         if final_score < 20: label = "Extreme Fear"
                         
                         result = {"score": int(final_score), "label": label}
-                        
-                        _SENTIMENT_CACHE[cache_key] = {
-                            "data": result,
-                            "timestamp": now
-                        }
+
+                        # Update cache with lock
+                        async with _cache_lock:
+                            _SENTIMENT_CACHE[cache_key] = {
+                                "data": result,
+                                "timestamp": now
+                            }
                         return result
                         
     except Exception as e:
