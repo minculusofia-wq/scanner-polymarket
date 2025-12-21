@@ -14,16 +14,30 @@ logger = get_logger(__name__)
 
 class CacheService:
     """
-    Simple cache service with:
-    - In-memory storage for fast access
+    Hybrid cache service with:
+    - Optional Redis for distributed caching
+    - In-memory storage as primary/fallback
     - File backup for persistence across restarts
     - TTL (time-to-live) support
     - Automatic fallback to last known good data
     """
     
-    def __init__(self, cache_dir: str = None):
+    def __init__(self, cache_dir: str = None, redis_url: str = None):
         self._memory_cache: dict = {}
         self._cache_times: dict = {}
+        self._redis = None
+        
+        # Try to connect to Redis if URL provided
+        redis_url = redis_url or os.getenv("REDIS_URL")
+        if redis_url:
+            try:
+                import redis
+                self._redis = redis.from_url(redis_url, decode_responses=True)
+                self._redis.ping()  # Test connection
+                logger.info("✅ Redis cache connected")
+            except Exception as e:
+                logger.warning(f"Redis unavailable, using memory cache: {e}")
+                self._redis = None
         
         # Cache directory for file backup
         if cache_dir:

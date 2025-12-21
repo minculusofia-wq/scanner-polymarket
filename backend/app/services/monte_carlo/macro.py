@@ -20,14 +20,12 @@ HIGH_IMPACT_KEYWORDS = ["fomc", "fed interest", "non-farm", "cpi", "gdp"]
 
 
 def _get_ssl_context():
-    """Get SSL context based on environment configuration."""
+    """Get SSL context - disable verification to avoid macOS SSL issues."""
     import ssl
-    if os.getenv("DISABLE_SSL_VERIFY", "").lower() == "true":
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        return ssl_context
-    return None  # Use default SSL verification
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    return ssl_context
 
 
 def _analyze_events(events: List[Dict[str, Any]]) -> float:

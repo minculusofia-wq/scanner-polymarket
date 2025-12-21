@@ -6,6 +6,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime, timezone
 import httpx
+import asyncio
 import json
 
 from app.core.cache import cache
@@ -59,9 +60,38 @@ class SignalResponse(BaseModel):
     error: Optional[str] = None
 
 
-async def fetch_markets_from_api():
-    """Fetch ALL markets from Polymarket API using pagination."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+async def fetch_markets_from_api(max_retries: int = 3):
+    """Fetch ALL markets from Polymarket API using pagination with retry logic."""
+    
+    async def fetch_with_retry(client, url, attempt=1):
+        """Fetch URL with exponential backoff retry."""
+        try:
+            response = await client.get(url)
+            if response.status_code == 200:
+                return response.json(), None
+            elif response.status_code == 429:  # Rate limited
+                if attempt < max_retries:
+                    wait_time = 2 ** attempt  # 2, 4, 8 seconds
+                    logger.warning(f"Rate limited, waiting {wait_time}s before retry {attempt + 1}/{max_retries}")
+                    await asyncio.sleep(wait_time)
+                    return await fetch_with_retry(client, url, attempt + 1)
+            elif response.status_code >= 500:  # Server error
+                if attempt < max_retries:
+                    wait_time = 2 ** attempt
+                    logger.warning(f"Server error {response.status_code}, retrying in {wait_time}s")
+                    await asyncio.sleep(wait_time)
+                    return await fetch_with_retry(client, url, attempt + 1)
+            return None, f"API Error {response.status_code}"
+        except httpx.TimeoutException:
+            if attempt < max_retries:
+                logger.warning(f"Timeout, retry {attempt + 1}/{max_retries}")
+                return await fetch_with_retry(client, url, attempt + 1)
+            return None, "Timeout après plusieurs tentatives"
+        except Exception as e:
+            return None, str(e)
+    
+    # Reduced timeout: 10s instead of 30s
+    async with httpx.AsyncClient(timeout=10.0) as client:
         all_markets = []
         offset = 0
         limit = 1000
@@ -69,34 +99,27 @@ async def fetch_markets_from_api():
         
         try:
             while True:
-                # Fetch only active and non-closed markets
                 url = f"{base_url}?limit={limit}&offset={offset}&active=true&closed=false"
                 
-                try:
-                    response = await client.get(url)
-                    if response.status_code == 200:
-                        data = response.json()
-                        
-                        if not isinstance(data, list) or len(data) == 0:
-                            break
-                            
-                        all_markets.extend(data)
-                        logger.debug(f"Fetched {len(data)} markets (Offset: {offset})")
-                        
-                        if len(data) < limit:
-                            break
-                            
-                        offset += limit
-                        
-                        # Safety break to avoid infinite loops if something goes wrong
-                        if offset > 10000:
-                            break
-                    else:
-                        logger.warning(f"API Error {response.status_code}: {response.text}")
-                        break
-                        
-                except Exception as e:
-                    logger.error(f"Error checking url {url}: {e}")
+                data, error = await fetch_with_retry(client, url)
+                
+                if error:
+                    logger.warning(f"API Error: {error}")
+                    break
+                
+                if not isinstance(data, list) or len(data) == 0:
+                    break
+                    
+                all_markets.extend(data)
+                logger.debug(f"Fetched {len(data)} markets (Offset: {offset})")
+                
+                if len(data) < limit:
+                    break
+                    
+                offset += limit
+                
+                # Safety break
+                if offset > 10000:
                     break
             
             if len(all_markets) > 0:
@@ -107,6 +130,7 @@ async def fetch_markets_from_api():
         except Exception as e:
             logger.error(f"Error fetching markets: {e}")
             return None, str(e)
+
 
 
 async def fetch_markets():
@@ -313,7 +337,7 @@ def market_to_signal(market: dict) -> Signal:
     )
 
 
-@router.get("/", response_model=SignalResponse)
+@router.get("", response_model=SignalResponse)
 async def get_signals(
     min_score: int = Query(default=0, ge=0, le=100),
     min_volume: float = Query(default=0, ge=0),

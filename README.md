@@ -78,12 +78,20 @@ pip install -r requirements.txt
 ### 2. Configuration
 Créez un fichier `.env` dans le dossier `backend` :
 ```env
-NEWSAPI_KEY=votre_cle_ici
-SERPAPI_KEY=votre_cle_ici
-# Optionnel (Pour fonctionnalités avancées)
-ALPHA_VANTAGE_KEY=votre_cle_ici
-FINNHUB_KEY=votre_cle_ici
+# === APIs Principales (Recommandé) ===
+NEWSAPI_KEY=votre_cle_ici          # https://newsapi.org
+SERPAPI_KEY=votre_cle_ici          # https://serpapi.com
+
+# === Monte Carlo & Quant (Optionnel mais recommandé) ===
+FINNHUB_KEY=votre_cle_ici          # https://finnhub.io - Calendrier économique
+ALPHA_VANTAGE_KEY=votre_cle_ici    # https://alphavantage.co - Sentiment TradFi
+
+# === Cache (Optionnel) ===
+REDIS_URL=redis://localhost:6379/0  # Si Redis est disponible (fallback sur mémoire sinon)
 ```
+
+> **Note :** Toutes les clés sont optionnelles. Le bot fonctionne sans mais avec des fonctionnalités réduites.
+
 
 ### 3. Installation du Frontend
 ```bash

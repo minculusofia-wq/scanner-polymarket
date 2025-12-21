@@ -314,14 +314,20 @@ class MonteCarloCalculator:
             
         # Run simulation with macro adjustment using ProcessPoolExecutor
         loop = asyncio.get_event_loop()
-        # Non-blocking simulation on separate process
-        result = await loop.run_in_executor(
-            self.executor, 
-            run_simulation_task, 
-            model, 
-            end_date, 
-            macro_mult
-        )
+        # Non-blocking simulation on separate process with 30s timeout
+        try:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    self.executor, 
+                    run_simulation_task, 
+                    model, 
+                    end_date, 
+                    macro_mult
+                ),
+                timeout=30.0  # 30 second timeout per simulation
+            )
+        except asyncio.TimeoutError:
+            raise ValueError(f"Monte Carlo simulation timeout for {asset}")
         
         # Calculate probability based on direction
         if direction == "below":
