@@ -125,13 +125,33 @@ export default function MonteCarloPanel() {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`/api/monte-carlo/edge?min_edge=${minEdge}&limit=20`);
-            if (!response.ok) throw new Error('Failed to fetch');
+            // Add timeout to prevent infinite loading
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
+
+            const response = await fetch(`/api/monte-carlo/edge?min_edge=${minEdge}&limit=20`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
             const data: EdgeResponse = await response.json();
             setOpportunities(data.opportunities);
             setStats({ total: data.total, analyzed: data.crypto_markets_analyzed });
         } catch (err) {
-            setError('Erreur lors du chargement des opportunités Monte Carlo');
+            if (err instanceof Error) {
+                if (err.name === 'AbortError') {
+                    setError('Timeout: L\'analyse Monte Carlo prend trop de temps. Réessayez.');
+                } else if (err.message.includes('Failed to fetch')) {
+                    setError('Backend non disponible. Lancez LANCER.command');
+                } else {
+                    setError(`Erreur: ${err.message}`);
+                }
+            } else {
+                setError('Erreur lors du chargement des opportunités Monte Carlo');
+            }
             console.error(err);
         } finally {
             setLoading(false);
