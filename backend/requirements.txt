@@ -88,8 +88,6 @@ simple-websocket==1.1.0
 six==1.17.0
 socksio==1.0.0
 soupsieve==2.8
-# Editable install with no version control (specify-cli==0.0.22)
--e /Users/anthony/Desktop/spec-kit
 SQLAlchemy==2.0.44
 starlette==0.50.0
 toolz==1.1.0

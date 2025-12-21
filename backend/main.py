@@ -83,12 +83,13 @@ app = FastAPI(
     title="Polymarket Scanner Bot",
     description="Bot for scanning whales, volume, and news on Polymarket",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    redirect_slashes=False
 )
 
 # CORS middleware - Configure allowed origins via CORS_ORIGINS env var
 # Default allows localhost for development
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3333,http://127.0.0.1:3333").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,

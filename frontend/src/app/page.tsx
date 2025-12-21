@@ -400,9 +400,7 @@ export default function Dashboard() {
         if (isLive && newSignals.length > 0) {
             setSignals(newSignals);
             setLastUpdate(new Date());
-            if (wsError) {
-                setError(wsError);
-            }
+            setError(wsError);  // Clear error on success, set on error
         }
     }, [isLive, activeTab]);
 
@@ -480,6 +478,7 @@ export default function Dashboard() {
             } else if (data.signals && Array.isArray(data.signals)) {
                 setSignals(data.signals);
                 setLastUpdate(new Date());
+                setError(null);  // Clear error on successful fetch
             }
             setIsLoading(false);
         } catch (err) {
